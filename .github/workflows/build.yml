@@ -1,0 +1,48 @@
+name: Build desktop installers
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            dist_script: dist:win
+            artifact_glob: |
+              release/*.exe
+              release/*.exe.blockmap
+          - os: macos-latest
+            dist_script: dist:mac
+            artifact_glob: |
+              release/*.dmg
+              release/*.dmg.blockmap
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer
+        run: npm run ${{ matrix.dist_script }}
+        env:
+          # No code-signing certificate configured yet; skip auto-discovery so
+          # unsigned builds still succeed (macOS will show an "unidentified
+          # developer" warning until this is set up).
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screen-capture-app-${{ matrix.os }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error

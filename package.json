@@ -1,0 +1,56 @@
+{
+  "name": "screen-capture-app",
+  "private": true,
+  "version": "0.0.1",
+  "description": "간단한 크로스플랫폼 화면 캡쳐 앱",
+  "author": "sam",
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "icon-gen": "^5.0.0",
+    "oxlint": "^1.81.0",
+    "sharp": "^0.35.4",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-electron": "^1.1.2",
+    "vite-plugin-electron-renderer": "^1.0.0"
+  },
+  "build": {
+    "appId": "com.orca1.screencaptureapp",
+    "productName": "ScreenCaptureApp",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    }
+  }
+}
