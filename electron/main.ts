@@ -33,6 +33,19 @@ let pickerWindow: BrowserWindow | null = null
 let editorWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 
+// Prevent a second instance: without this, launching the app twice registers
+// duplicate (and conflicting) global shortcuts across two separate processes,
+// so capture and the editor window behave unpredictably depending on which
+// instance's hotkey registration Windows honors.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+}
+
+app.on('second-instance', () => {
+  mainWindow?.show()
+  mainWindow?.focus()
+})
+
 const FULL_CAPTURE_SHORTCUT = 'CommandOrControl+Shift+S'
 const REGION_CAPTURE_SHORTCUT = 'CommandOrControl+Shift+A'
 const WINDOW_CAPTURE_SHORTCUT = 'CommandOrControl+Shift+W'
@@ -146,6 +159,7 @@ async function startRegionCapture() {
   })
   overlayWindow.setAlwaysOnTop(true, 'screen-saver')
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  overlayWindow.focus()
 
   const dataUrl = image.toDataURL()
 
@@ -212,6 +226,7 @@ async function startWindowCapture() {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+  pickerWindow.focus()
 
   pickerWindow.webContents.once('did-finish-load', () => {
     pickerWindow?.webContents.send(
@@ -268,11 +283,19 @@ function openEditorWindow(image: NativeImage, filePath: string) {
     },
   })
 
+  // Capture is usually triggered by a global shortcut while some other app has
+  // OS focus. Windows can then show this window without giving it real
+  // keyboard focus, so typed text silently goes to whatever was focused
+  // before. Force focus now and again once content loads, so the text tool's
+  // input reliably receives keystrokes.
+  editorWindow.focus()
+
   editorWindow.webContents.once('did-finish-load', () => {
     editorWindow?.webContents.send('editor:init', {
       dataUrl: image.toDataURL(),
       filePath,
     })
+    editorWindow?.focus()
   })
 
   loadPage(editorWindow, 'editor.html')
