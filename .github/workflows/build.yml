@@ -64,18 +64,25 @@ jobs:
         id: tag
         shell: bash
         run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           if [ "${{ github.ref_type }}" = "tag" ]; then
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "release_name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           else
             echo "tag=latest-build" >> "$GITHUB_OUTPUT"
+            echo "release_name=latest-build ($SHORT_SHA)" >> "$GITHUB_OUTPUT"
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.release_name }}
           prerelease: ${{ steps.tag.outputs.prerelease }}
           files: artifacts/**/*
+          body: |
+            Built from commit ${{ github.sha }} (run #${{ github.run_number }}).
+            ${{ github.event.head_commit.message || 'Manually triggered via workflow_dispatch.' }}
