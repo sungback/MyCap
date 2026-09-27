@@ -76,6 +76,14 @@ jobs:
           fi
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Delete previous rolling release
+        if: steps.tag.outputs.tag == 'latest-build'
+        shell: bash
+        run: gh release delete latest-build --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
