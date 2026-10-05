@@ -25,6 +25,15 @@ const isPortable = Boolean(
 
 let isManualUpdateCheck = false
 
+function broadcastUpdateStatus(status: {
+  state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+  version?: string
+  percent?: number
+  message?: string
+}) {
+  mainWindow?.webContents.send('update:status', status)
+}
+
 function setupAutoUpdater() {
   if (VITE_DEV_SERVER_URL || !app.isPackaged) {
     return
@@ -32,10 +41,18 @@ function setupAutoUpdater() {
 
   autoUpdater.logger = console
 
+  autoUpdater.on('checking-for-update', () => {
+    broadcastUpdateStatus({ state: 'checking' })
+  })
+
   if (isPortable) {
     autoUpdater.autoDownload = false
 
     autoUpdater.on('update-available', (info) => {
+      broadcastUpdateStatus({
+        state: 'available',
+        version: info.version,
+      })
       const notification = new Notification({
         title: '새 버전 출시 안내 (포터블)',
         body: `새 버전(v${info.version})이 출시되었습니다.\n클릭하여 최신 버전을 다운로드하세요.`,
@@ -49,7 +66,25 @@ function setupAutoUpdater() {
     autoUpdater.autoDownload = true
     autoUpdater.autoInstallOnAppQuit = true
 
+    autoUpdater.on('update-available', (info) => {
+      broadcastUpdateStatus({
+        state: 'available',
+        version: info.version,
+      })
+    })
+
+    autoUpdater.on('download-progress', (progress) => {
+      broadcastUpdateStatus({
+        state: 'downloading',
+        percent: Math.round(progress.percent),
+      })
+    })
+
     autoUpdater.on('update-downloaded', (info) => {
+      broadcastUpdateStatus({
+        state: 'downloaded',
+        version: info.version,
+      })
       const notification = new Notification({
         title: '새 업데이트 다운로드 완료',
         body: `v${info.version} 다운로드가 완료되었습니다.\n앱을 재시작하면 최신 버전이 적용됩니다.`,
@@ -63,6 +98,10 @@ function setupAutoUpdater() {
   }
 
   autoUpdater.on('update-not-available', () => {
+    broadcastUpdateStatus({
+      state: 'up-to-date',
+      version: app.getVersion(),
+    })
     if (isManualUpdateCheck) {
       new Notification({
         title: '최신 버전',
@@ -73,6 +112,10 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('Update error:', err)
+    broadcastUpdateStatus({
+      state: 'error',
+      message: err.message,
+    })
     if (isManualUpdateCheck) {
       new Notification({
         title: '업데이트 확인 실패',
@@ -90,6 +133,11 @@ function setupAutoUpdater() {
 
 function checkForUpdates(isManual = false) {
   if (VITE_DEV_SERVER_URL || !app.isPackaged) {
+    broadcastUpdateStatus({
+      state: 'up-to-date',
+      version: app.getVersion(),
+      message: '개발 모드에서는 최신 버전으로 처리됩니다.',
+    })
     if (isManual) {
       new Notification({
         title: '업데이트 확인',
@@ -100,8 +148,10 @@ function checkForUpdates(isManual = false) {
   }
 
   isManualUpdateCheck = isManual
+  broadcastUpdateStatus({ state: 'checking' })
   autoUpdater.checkForUpdates().catch((err) => {
     console.error('Manual update check failed:', err)
+    broadcastUpdateStatus({ state: 'error', message: err.message })
     if (isManual) {
       new Notification({
         title: '업데이트 확인 실패',
@@ -414,8 +464,8 @@ function openEditorWindow(image: NativeImage, filePath: string) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 430,
-    height: 490,
+    width: 440,
+    height: 510,
     resizable: false,
     autoHideMenuBar: true,
     icon: APP_ICON_PATH,
@@ -462,6 +512,19 @@ function createTray() {
 ipcMain.handle('capture:trigger', () => captureFullScreen())
 ipcMain.handle('capture:triggerRegion', () => startRegionCapture())
 ipcMain.handle('capture:triggerWindow', () => startWindowCapture())
+
+ipcMain.handle('update:getInfo', () => ({
+  version: app.getVersion(),
+  isPortable,
+}))
+ipcMain.handle('update:check', () => checkForUpdates(true))
+ipcMain.handle('update:restart', () => {
+  ;(app as any).isQuitting = true
+  autoUpdater.quitAndInstall()
+})
+ipcMain.handle('update:openDownloadPage', () => {
+  shell.openExternal('https://github.com/sungback/MyCap/releases/latest')
+})
 
 app.whenReady().then(() => {
   createWindow()

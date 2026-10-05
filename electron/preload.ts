@@ -52,3 +52,30 @@ contextBridge.exposeInMainWorld('editorApi', {
   save: (dataUrl: string) => ipcRenderer.invoke('editor:save', { dataUrl }),
   close: () => ipcRenderer.send('editor:close'),
 })
+
+contextBridge.exposeInMainWorld('updateApi', {
+  getInfo: () => ipcRenderer.invoke('update:getInfo'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  restartAndInstall: () => ipcRenderer.invoke('update:restart'),
+  openDownloadPage: () => ipcRenderer.invoke('update:openDownloadPage'),
+  onStatusChange: (
+    callback: (status: {
+      state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+      version?: string
+      percent?: number
+      message?: string
+    }) => void,
+  ) => {
+    const listener = (
+      _event: unknown,
+      status: {
+        state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+        version?: string
+        percent?: number
+        message?: string
+      },
+    ) => callback(status)
+    ipcRenderer.on('update:status', listener)
+    return () => ipcRenderer.removeListener('update:status', listener)
+  },
+})

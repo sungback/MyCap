@@ -1,16 +1,37 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
+type UpdateState = {
+  state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+  version?: string
+  percent?: number
+  message?: string
+}
+
 function App() {
   const [lastCapture, setLastCapture] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
+  const [versionInfo, setVersionInfo] = useState<{ version: string; isPortable: boolean } | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<UpdateState>({ state: 'idle' })
 
   useEffect(() => {
-    const unsubscribe = window.captureApi?.onCaptureDone(({ filePath }) => {
+    const unsubscribeCapture = window.captureApi?.onCaptureDone(({ filePath }) => {
       setLastCapture(filePath)
       setCapturing(false)
     })
-    return () => unsubscribe?.()
+
+    window.updateApi?.getInfo().then((info) => {
+      if (info) setVersionInfo(info)
+    })
+
+    const unsubscribeUpdate = window.updateApi?.onStatusChange((status) => {
+      setUpdateStatus(status)
+    })
+
+    return () => {
+      unsubscribeCapture?.()
+      unsubscribeUpdate?.()
+    }
   }, [])
 
   const handleCapture = async () => {
@@ -24,6 +45,19 @@ function App() {
 
   const handleWindowCapture = async () => {
     await window.captureApi?.triggerWindowCapture()
+  }
+
+  const handleCheckUpdate = async () => {
+    setUpdateStatus({ state: 'checking' })
+    await window.updateApi?.checkForUpdates()
+  }
+
+  const handleRestart = async () => {
+    await window.updateApi?.restartAndInstall()
+  }
+
+  const handleDownload = async () => {
+    await window.updateApi?.openDownloadPage()
   }
 
   return (
@@ -54,6 +88,65 @@ function App() {
           <code>{lastCapture}</code>
         </div>
       )}
+
+      <footer className="update-footer">
+        <div className="version-row">
+          <span className="version-info">
+            v{versionInfo?.version || '0.0.3'}
+            <span className={`version-pill ${versionInfo?.isPortable ? 'portable' : 'setup'}`}>
+              {versionInfo?.isPortable ? '무설치' : '설치형'}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="check-update-btn"
+            onClick={handleCheckUpdate}
+            disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'}
+          >
+            {updateStatus.state === 'checking' ? '확인 중...' : '업데이트 확인'}
+          </button>
+        </div>
+
+        {updateStatus.state === 'up-to-date' && (
+          <div className="update-message success">
+            <span>✓ 최신 버전을 사용 중입니다.</span>
+          </div>
+        )}
+
+        {updateStatus.state === 'available' && (
+          <div className="update-message available">
+            <span>새 버전(v{updateStatus.version})이 출시되었습니다!</span>
+            {versionInfo?.isPortable ? (
+              <button type="button" className="update-action-btn" onClick={handleDownload}>
+                다운로드
+              </button>
+            ) : (
+              <span className="update-sub">백그라운드에서 다운로드 중...</span>
+            )}
+          </div>
+        )}
+
+        {updateStatus.state === 'downloading' && (
+          <div className="update-message downloading">
+            <span>다운로드 중... {updateStatus.percent ? `${updateStatus.percent}%` : ''}</span>
+          </div>
+        )}
+
+        {updateStatus.state === 'downloaded' && (
+          <div className="update-message downloaded">
+            <span>v{updateStatus.version} 준비 완료!</span>
+            <button type="button" className="update-action-btn restart" onClick={handleRestart}>
+              재시작하여 적용
+            </button>
+          </div>
+        )}
+
+        {updateStatus.state === 'error' && (
+          <div className="update-message error">
+            <span>{updateStatus.message || '업데이트 확인 중 오류가 발생했습니다.'}</span>
+          </div>
+        )}
+      </footer>
     </main>
   )
 }

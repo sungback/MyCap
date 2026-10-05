@@ -27,5 +27,19 @@ declare global {
       save: (dataUrl: string) => Promise<void>
       close: () => void
     }
+    updateApi?: {
+      getInfo: () => Promise<{ version: string; isPortable: boolean }>
+      checkForUpdates: () => Promise<void>
+      restartAndInstall: () => Promise<void>
+      openDownloadPage: () => Promise<void>
+      onStatusChange: (
+        callback: (status: {
+          state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
+          version?: string
+          percent?: number
+          message?: string
+        }) => void,
+      ) => () => void
+    }
   }
 }

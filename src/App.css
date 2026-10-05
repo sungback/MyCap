@@ -58,3 +58,117 @@
   text-align: left;
   word-break: break-all;
 }
+
+.update-footer {
+  margin-top: 1.25rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.version-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.version-pill {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.version-pill.portable {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.version-pill.setup {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.check-update-btn {
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.check-update-btn:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.check-update-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.update-message {
+  margin-top: 0.6rem;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.update-message.success {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.update-message.available,
+.update-message.downloading {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.update-message.downloaded {
+  background: #f5f3ff;
+  color: #5b21b6;
+}
+
+.update-message.error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.update-action-btn {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.update-action-btn.restart {
+  background: #7c3aed;
+}
+
+.update-action-btn:hover {
+  opacity: 0.9;
+}
+
+.update-sub {
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
