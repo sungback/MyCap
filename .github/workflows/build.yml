@@ -26,6 +26,9 @@ jobs:
             artifact_glob: |
               release/*.dmg
               release/*.dmg.blockmap
+              release/*.zip
+              release/*.zip.blockmap
+              release/latest-mac.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

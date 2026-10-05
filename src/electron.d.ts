@@ -28,7 +28,7 @@ declare global {
       close: () => void
     }
     updateApi?: {
-      getInfo: () => Promise<{ version: string; isPortable: boolean }>
+      getInfo: () => Promise<{ version: string; isPortable: boolean; platform?: string }>
       checkForUpdates: () => Promise<void>
       restartAndInstall: () => Promise<void>
       openDownloadPage: () => Promise<void>

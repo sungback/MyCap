@@ -131,6 +131,11 @@
   color: #3730a3;
 }
 
+.version-pill.macos {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
 .check-update-btn {
   background: white;
   border: 1px solid #d1d5db;

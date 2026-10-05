@@ -20,7 +20,9 @@ import { fileURLToPath } from 'node:url'
 import { autoUpdater } from 'electron-updater'
 
 const isPortable = Boolean(
-  process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE,
+  process.env.PORTABLE_EXECUTABLE_DIR ||
+    process.env.PORTABLE_EXECUTABLE_FILE ||
+    process.platform === 'darwin',
 )
 
 let isManualUpdateCheck = false
@@ -53,8 +55,9 @@ function setupAutoUpdater() {
         state: 'available',
         version: info.version,
       })
+      const isMac = process.platform === 'darwin'
       const notification = new Notification({
-        title: '새 버전 출시 안내 (포터블)',
+        title: isMac ? '새 버전 출시 안내' : '새 버전 출시 안내 (포터블)',
         body: `새 버전(v${info.version})이 출시되었습니다.\n클릭하여 최신 버전을 다운로드하세요.`,
       })
       notification.on('click', () => {
@@ -114,7 +117,7 @@ function setupAutoUpdater() {
     console.error('Update error:', err)
     broadcastUpdateStatus({
       state: 'error',
-      message: err.message,
+      message: '업데이트 서버에 연결할 수 없거나 최신 정보를 확인하지 못했습니다.',
     })
     if (isManualUpdateCheck) {
       new Notification({
@@ -516,6 +519,7 @@ ipcMain.handle('capture:triggerWindow', () => startWindowCapture())
 ipcMain.handle('update:getInfo', () => ({
   version: app.getVersion(),
   isPortable,
+  platform: process.platform,
 }))
 ipcMain.handle('update:check', () => checkForUpdates(true))
 ipcMain.handle('update:restart', () => {

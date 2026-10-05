@@ -11,7 +11,11 @@ type UpdateState = {
 function App() {
   const [lastCapture, setLastCapture] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
-  const [versionInfo, setVersionInfo] = useState<{ version: string; isPortable: boolean } | null>(null)
+  const [versionInfo, setVersionInfo] = useState<{
+    version: string
+    isPortable: boolean
+    platform?: string
+  } | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateState>({ state: 'idle' })
 
   useEffect(() => {
@@ -93,8 +97,20 @@ function App() {
         <div className="version-row">
           <span className="version-info">
             v{versionInfo?.version || '0.0.3'}
-            <span className={`version-pill ${versionInfo?.isPortable ? 'portable' : 'setup'}`}>
-              {versionInfo?.isPortable ? '무설치' : '설치형'}
+            <span
+              className={`version-pill ${
+                versionInfo?.platform === 'darwin'
+                  ? 'macos'
+                  : versionInfo?.isPortable
+                    ? 'portable'
+                    : 'setup'
+              }`}
+            >
+              {versionInfo?.platform === 'darwin'
+                ? 'macOS'
+                : versionInfo?.isPortable
+                  ? '무설치'
+                  : '설치형'}
             </span>
           </span>
           <button

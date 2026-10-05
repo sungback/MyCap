@@ -1,7 +1,7 @@
 {
   "name": "screen-capture-app",
   "private": true,
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "간단한 크로스플랫폼 화면 캡쳐 앱",
   "author": "sam",
   "type": "module",
@@ -50,7 +50,10 @@
       "dist-electron/**/*"
     ],
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.utilities",
       "icon": "build/icon.icns"
     },
