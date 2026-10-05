@@ -45,9 +45,10 @@ function setupAutoUpdater() {
     broadcastUpdateStatus({ state: 'checking' })
   })
 
-  if (isPortable) {
-    autoUpdater.autoDownload = false
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
 
+  if (isPortable) {
     autoUpdater.on('update-available', (info) => {
       broadcastUpdateStatus({
         state: 'available',
@@ -55,7 +56,7 @@ function setupAutoUpdater() {
       })
       const notification = new Notification({
         title: '새 버전 출시 안내 (포터블)',
-        body: `새 버전(v${info.version})이 출시되었습니다.\n클릭하여 최신 버전을 다운로드하세요.`,
+        body: `새 버전(v${info.version})이 있습니다.\n클릭하여 최신 버전을 다운로드하세요.`,
       })
       notification.on('click', () => {
         shell.openExternal('https://github.com/sungback/MyCap/releases/latest')
@@ -63,14 +64,20 @@ function setupAutoUpdater() {
       notification.show()
     })
   } else {
-    autoUpdater.autoDownload = true
-    autoUpdater.autoInstallOnAppQuit = true
-
     autoUpdater.on('update-available', (info) => {
       broadcastUpdateStatus({
         state: 'available',
         version: info.version,
       })
+      const notification = new Notification({
+        title: '새 버전 출시 안내',
+        body: `새 버전(v${info.version})이 있습니다.\n앱에서 [업데이트 다운로드]를 클릭하여 업데이트를 진행하세요.`,
+      })
+      notification.on('click', () => {
+        mainWindow?.show()
+        mainWindow?.focus()
+      })
+      notification.show()
     })
 
     autoUpdater.on('download-progress', (progress) => {
@@ -680,6 +687,18 @@ ipcMain.handle('update:getInfo', () => ({
   platform: process.platform,
 }))
 ipcMain.handle('update:check', () => checkForUpdates(true))
+ipcMain.handle('update:startDownload', async () => {
+  broadcastUpdateStatus({ state: 'downloading', percent: 0 })
+  try {
+    await autoUpdater.downloadUpdate()
+  } catch (err: any) {
+    console.error('Download update failed:', err)
+    broadcastUpdateStatus({
+      state: 'error',
+      message: '다운로드 중 문제가 발생했습니다. 수동 다운로드를 이용할 수 있습니다.',
+    })
+  }
+})
 ipcMain.handle('update:restart', () => {
   ;(app as any).isQuitting = true
   autoUpdater.quitAndInstall()

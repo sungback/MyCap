@@ -13,21 +13,24 @@ MyCap (ScreenCaptureApp) 프로젝트의 작업 목록, 진행 상태 및 변경
 | **T-003** | AGENTS.md 가이드 업데이트 | `DONE` | macOS 자동 업데이트 정책 및 Windows 재설치 버튼 명칭 반영. |
 | **T-004** | 빌드 검증 및 릴리스 배포 (v0.0.10) | `DONE` | `npm run build && npm run lint` 통과 후 `v0.0.10` 태그 생성, 원격 푸시 및 GitHub Actions 배포 완료. |
 | **T-005** | macOS 캡처 이미지 저장 폴더 변경 (v0.0.11) | `DONE` | macOS에서 이미지 저장 위치를 `Pictures/ScreenCaptureApp`에서 `Downloads` 폴더로 변경 및 v0.0.11 배포 완료. |
-| **T-006** | Windows 캡처 이미지 저장 폴더 Downloads 변경 | `DONE` | Windows에서도 이미지 기본 저장 폴더를 `Downloads`(`app.getPath('downloads')`)로 일원화 변경. |
+| **T-006** | Windows 캡처 이미지 저장 폴더 Downloads 변경 (v0.0.12) | `DONE` | Windows에서도 이미지 기본 저장 폴더를 `Downloads`(`app.getPath('downloads')`)로 일원화 변경 및 v0.0.12 배포 완료. |
+| **T-007** | 사용자 동의 기반 업데이트 다운로드 전환 | `DONE` | 무조건 자동 다운로드/설치 방지: `autoDownload = false`, `autoInstallOnAppQuit = false` 설정, 새 버전 감지 시 "새 버전(vX.X.X)이 있습니다" 알림 및 `[업데이트 다운로드]` 버튼 클릭 시 다운로드 시작. |
 
 ---
 
 ## 📋 세부 구현 계획
 
-### 1. 전 플랫폼 이미지 저장 폴더 Downloads 일원화 (T-006)
-* **파일:** `electron/main.ts`, `README.md`
+### 1. 사용자 동의 기반 업데이트 다운로드 전환 (T-007)
+* **파일:** `electron/main.ts`, `electron/preload.ts`, `src/electron.d.ts`, `src/App.tsx`
 * **내용:**
-  * `getSaveDir()` 함수를 간소화하여 플랫폼 구분 없이 모든 OS에서 `app.getPath('downloads')`를 반환하도록 일원화.
-  * README.md 안내 문구 업데이트.
+  * `autoDownload = false`, `autoInstallOnAppQuit = false`로 변경하여 자동 백그라운드 다운로드 및 종료 시 강제 설치 차단.
+  * 새 버전 감지 시 UI에 "새 버전(vX.X.X)이 있습니다" 문구 및 `[업데이트 다운로드]` 버튼 제공.
+  * 버튼 클릭 시 `window.updateApi.startDownload()` 호출하여 다운로드 개시 및 진행률 표시.
+  * 다운로드 완료 시에만 `[재설치하여 적용]` / `[재시작하여 적용]` 버튼 제공.
 
 ### 2. 문서 및 릴리스 배포
-* `AGENTS.md` 업데이트 및 `package.json` 버전 패치 (`0.0.12`).
-* 빌드/린트 검증 후 `v0.0.12` 릴리스 태그 푸시 및 GitHub Actions 배포 모니터링.
+* `AGENTS.md` 업데이트 및 `package.json` 버전 패치 (`0.0.13`).
+* 빌드/린트 검증 후 `v0.0.13` 릴리스 태그 푸시 및 GitHub Actions 배포 모니터링.
 
 ---
 
@@ -41,3 +44,4 @@ MyCap (ScreenCaptureApp) 프로젝트의 작업 목록, 진행 상태 및 변경
 * **v0.0.9**: 개발 원칙 및 주의사항을 총정리한 `AGENTS.md` 구축.
 * **v0.0.10**: Windows 재설치 버튼 문구 변경, macOS 인앱 자동 업데이트 복원 및 수동 다운로드 폴백 버튼 추가.
 * **v0.0.11**: macOS 캡처 이미지 저장 기본 경로를 `Downloads` 폴더로 변경.
+* **v0.0.12**: Windows에서도 캡처 이미지 저장 기본 경로를 `Downloads` 폴더로 일원화.

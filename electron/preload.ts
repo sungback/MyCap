@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld('editorApi', {
 contextBridge.exposeInMainWorld('updateApi', {
   getInfo: () => ipcRenderer.invoke('update:getInfo'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  startDownload: () => ipcRenderer.invoke('update:startDownload'),
   restartAndInstall: () => ipcRenderer.invoke('update:restart'),
   openDownloadPage: () => ipcRenderer.invoke('update:openDownloadPage'),
   onStatusChange: (

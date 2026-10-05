@@ -71,6 +71,11 @@ function App() {
     await window.updateApi?.checkForUpdates()
   }
 
+  const handleStartDownload = async () => {
+    setUpdateStatus({ state: 'downloading', percent: 0 })
+    await window.updateApi?.startDownload()
+  }
+
   const handleRestart = async () => {
     await window.updateApi?.restartAndInstall()
   }
@@ -158,14 +163,14 @@ function App() {
 
         {updateStatus.state === 'available' && (
           <div className="update-message available">
-            <span>새 버전(v{updateStatus.version})이 출시되었습니다!</span>
-            {versionInfo?.isPortable ? (
-              <button type="button" className="update-action-btn" onClick={handleDownload}>
-                다운로드
-              </button>
-            ) : (
-              <span className="update-sub">백그라운드에서 다운로드 중...</span>
-            )}
+            <span>새 버전(v{updateStatus.version})이 있습니다</span>
+            <button
+              type="button"
+              className="update-action-btn"
+              onClick={versionInfo?.isPortable ? handleDownload : handleStartDownload}
+            >
+              업데이트 다운로드
+            </button>
           </div>
         )}
 

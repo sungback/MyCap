@@ -33,6 +33,7 @@ declare global {
     updateApi?: {
       getInfo: () => Promise<{ version: string; isPortable: boolean; platform?: string }>
       checkForUpdates: () => Promise<void>
+      startDownload: () => Promise<void>
       restartAndInstall: () => Promise<void>
       openDownloadPage: () => Promise<void>
       onStatusChange: (
