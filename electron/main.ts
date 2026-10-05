@@ -414,9 +414,10 @@ function openEditorWindow(image: NativeImage, filePath: string) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 420,
-    height: 400,
+    width: 430,
+    height: 490,
     resizable: false,
+    autoHideMenuBar: true,
     icon: APP_ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
