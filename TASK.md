@@ -12,22 +12,22 @@ MyCap (ScreenCaptureApp) 프로젝트의 작업 목록, 진행 상태 및 변경
 | **T-002** | macOS 인앱 자동 업데이트 복원 | `DONE` | `process.platform === 'darwin'`을 `isPortable`에서 분리하여 `autoDownload = true` 복원. 인앱 백그라운드 다운로드 및 재시작 업데이트 지원, 오류 발생 시 `[수동 다운로드]` 폴백 제공. |
 | **T-003** | AGENTS.md 가이드 업데이트 | `DONE` | macOS 자동 업데이트 정책 및 Windows 재설치 버튼 명칭 반영. |
 | **T-004** | 빌드 검증 및 릴리스 배포 (v0.0.10) | `DONE` | `npm run build && npm run lint` 통과 후 `v0.0.10` 태그 생성, 원격 푸시 및 GitHub Actions 배포 완료. |
-| **T-005** | macOS 캡처 이미지 저장 폴더 변경 | `DONE` | macOS에서 이미지 저장 위치를 `Pictures/ScreenCaptureApp`에서 `Downloads`(`app.getPath('downloads')`) 폴더로 변경. |
+| **T-005** | macOS 캡처 이미지 저장 폴더 변경 (v0.0.11) | `DONE` | macOS에서 이미지 저장 위치를 `Pictures/ScreenCaptureApp`에서 `Downloads` 폴더로 변경 및 v0.0.11 배포 완료. |
+| **T-006** | Windows 캡처 이미지 저장 폴더 Downloads 변경 | `DONE` | Windows에서도 이미지 기본 저장 폴더를 `Downloads`(`app.getPath('downloads')`)로 일원화 변경. |
 
 ---
 
 ## 📋 세부 구현 계획
 
-### 1. macOS 캡처 이미지 저장 폴더 변경 (T-005)
+### 1. 전 플랫폼 이미지 저장 폴더 Downloads 일원화 (T-006)
 * **파일:** `electron/main.ts`, `README.md`
 * **내용:**
-  * `getSaveDir()` 함수에서 `process.platform === 'darwin'`일 경우 `app.getPath('downloads')`를 반환하도록 분기 처리.
-  * Windows는 기존대로 `Pictures/ScreenCaptureApp` 유지.
-  * README.md의 기능 안내 문구 업데이트.
+  * `getSaveDir()` 함수를 간소화하여 플랫폼 구분 없이 모든 OS에서 `app.getPath('downloads')`를 반환하도록 일원화.
+  * README.md 안내 문구 업데이트.
 
 ### 2. 문서 및 릴리스 배포
-* `AGENTS.md` 업데이트 및 `package.json` 버전 패치 (`0.0.11`).
-* 빌드/린트 검증 후 `v0.0.11` 릴리스 태그 푸시 및 GitHub Actions 배포 모니터링.
+* `AGENTS.md` 업데이트 및 `package.json` 버전 패치 (`0.0.12`).
+* 빌드/린트 검증 후 `v0.0.12` 릴리스 태그 푸시 및 GitHub Actions 배포 모니터링.
 
 ---
 
@@ -40,3 +40,4 @@ MyCap (ScreenCaptureApp) 프로젝트의 작업 목록, 진행 상태 및 변경
 * **v0.0.8**: Windows 네이티브 커서 중복 버그 제거 및 영역 캡처 스케일 팩터 왜곡 해결.
 * **v0.0.9**: 개발 원칙 및 주의사항을 총정리한 `AGENTS.md` 구축.
 * **v0.0.10**: Windows 재설치 버튼 문구 변경, macOS 인앱 자동 업데이트 복원 및 수동 다운로드 폴백 버튼 추가.
+* **v0.0.11**: macOS 캡처 이미지 저장 기본 경로를 `Downloads` 폴더로 변경.

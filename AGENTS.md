@@ -77,9 +77,8 @@
 * 메인 윈도우는 고정 크기 창(`resizable: false`)입니다.
 * UI에 새로운 요소(토글 스위치, 힌트, 안내 문구 등)를 추가할 때는 반드시 메인 창의 높이(`mainWindow` height, 현재 540px)와 패딩/마진을 점검하여 불필요한 세로 스크롤바가 생기지 않도록 관리해야 합니다.
 
-### 🚨 5) 플랫폼별 이미지 기본 저장 경로
-* **Windows:** `Pictures/ScreenCaptureApp` (`path.join(app.getPath('pictures'), 'ScreenCaptureApp')`)
-* **macOS:** `Downloads` (`app.getPath('downloads')`) — 맥 사용자의 일반적인 워크플로우에 맞춰 다운로드 폴더에 직접 저장.
+### 🚨 5) 이미지 기본 저장 경로
+* **모든 플랫폼 (Windows, macOS):** 사용자 `Downloads` (`app.getPath('downloads')`) 폴더에 직접 저장. 사용자가 캡처 이미지를 직관적으로 찾아 사용할 수 있도록 일원화.
 
 ---
 
@@ -103,6 +102,8 @@
   * 업데이트 오류 시 최신 버전을 바로 다운로드할 수 있는 `[수동 다운로드]` 폴백 버튼 추가.
 * **v0.0.11**:
   * macOS 캡처 이미지 저장 기본 경로를 `Pictures/ScreenCaptureApp`에서 `Downloads`(`app.getPath('downloads')`) 폴더로 변경.
+* **v0.0.12**:
+  * Windows에서도 캡처 이미지 저장 기본 경로를 `Downloads`(`app.getPath('downloads')`) 폴더로 일원화.
 
 ---
 

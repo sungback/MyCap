@@ -205,10 +205,7 @@ function loadPage(win: BrowserWindow, htmlFile: string) {
 }
 
 function getSaveDir() {
-  const dir =
-    process.platform === 'darwin'
-      ? app.getPath('downloads')
-      : path.join(app.getPath('pictures'), 'ScreenCaptureApp')
+  const dir = app.getPath('downloads')
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   return dir
 }
