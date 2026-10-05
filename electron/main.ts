@@ -20,9 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { autoUpdater } from 'electron-updater'
 
 const isPortable = Boolean(
-  process.env.PORTABLE_EXECUTABLE_DIR ||
-    process.env.PORTABLE_EXECUTABLE_FILE ||
-    process.platform === 'darwin',
+  process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE,
 )
 
 let isManualUpdateCheck = false
@@ -55,9 +53,8 @@ function setupAutoUpdater() {
         state: 'available',
         version: info.version,
       })
-      const isMac = process.platform === 'darwin'
       const notification = new Notification({
-        title: isMac ? '새 버전 출시 안내' : '새 버전 출시 안내 (포터블)',
+        title: '새 버전 출시 안내 (포터블)',
         body: `새 버전(v${info.version})이 출시되었습니다.\n클릭하여 최신 버전을 다운로드하세요.`,
       })
       notification.on('click', () => {
@@ -88,9 +85,12 @@ function setupAutoUpdater() {
         state: 'downloaded',
         version: info.version,
       })
+      const isMac = process.platform === 'darwin'
       const notification = new Notification({
         title: '새 업데이트 다운로드 완료',
-        body: `v${info.version} 다운로드가 완료되었습니다.\n앱을 재시작하면 최신 버전이 적용됩니다.`,
+        body: isMac
+          ? `v${info.version} 다운로드가 완료되었습니다.\n앱을 재시작하면 최신 버전이 적용됩니다.`
+          : `v${info.version} 다운로드가 완료되었습니다.\n재설치를 진행하여 최신 버전을 적용하세요.`,
       })
       notification.on('click', () => {
         ;(app as any).isQuitting = true
@@ -117,12 +117,12 @@ function setupAutoUpdater() {
     console.error('Update error:', err)
     broadcastUpdateStatus({
       state: 'error',
-      message: '업데이트 서버에 연결할 수 없거나 최신 정보를 확인하지 못했습니다.',
+      message: '업데이트 중 문제가 발생했습니다. 수동 다운로드를 이용할 수 있습니다.',
     })
     if (isManualUpdateCheck) {
       new Notification({
-        title: '업데이트 확인 실패',
-        body: '업데이트 확인 중 오류가 발생했습니다.',
+        title: '업데이트 오류',
+        body: '업데이트 중 문제가 발생했습니다. 수동 다운로드를 이용해 주세요.',
       }).show()
     }
   })

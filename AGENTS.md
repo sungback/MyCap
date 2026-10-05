@@ -66,10 +66,12 @@
 * **주의:** 비트맵 조작 시 `nativeImage.createFromBitmap(bmp, { width, height, scaleFactor })`와 같이 `scaleFactor`를 1.0이 아닌 값(예: 1.5, 2.0)으로 넘기면, Electron 내부에서 이미지의 논리 크기를 다시 나누고 `crop()` 호출 시 `pixelRect`에 `scaleFactor`를 **이중으로 곱해버려** 캡처 영역이 오른쪽/아래로 밀리고 좌측이 잘려나가는 심각한 왜곡이 발생합니다.
 * 비트맵을 재생성할 때는 반드시 `{ width, height }` (scaleFactor 생략 = 1.0 기본값)을 유지해야 합니다.
 
-### 🚨 3) macOS 자동 업데이트 및 코드 서명 (`Squirrel.Mac / ShipIt`)
+### 🚨 3) macOS 자동 업데이트 및 Windows/macOS 업데이트 UI 분기
 * `electron-builder` 설정 시 `mac.target`에 `["dmg", "zip"]`이 모두 포함되어야만 GitHub Release에 `latest-mac.yml`과 업데이트용 zip이 생성됩니다 (`dmg`만 지정 시 `latest-mac.yml` 404 에러 발생).
-* macOS의 `electron-updater` 백그라운드 엔진인 `Squirrel.Mac (ShipIt)`은 **Apple 유료 개발자 인증서 서명을 강제**합니다. 무료/미서명 오픈소스 앱이 백그라운드 무인 설치(`autoDownload = true`)를 시도하면 OS 보안 정책상 `ShipIt` 서명 검증 실패 에러가 발생합니다.
-* **해결 원칙:** macOS 환경(`process.platform === 'darwin'`)은 Windows 포터블 모드처럼 `isPortable = true`로 간주하여 `autoDownload = false`로 설정하고, 새 버전 감지 시 브라우저를 통해 최신 DMG 다운로드 링크를 안내해야 합니다.
+* **macOS 인앱 업데이트 복원:** macOS 환경을 임의로 `isPortable` 모드로 강제하면 백그라운드 다운로드(`autoDownload`)가 꺼져 인앱 업데이트 기능이 완전히 작동하지 않습니다. macOS는 정상 설치형 환경으로 유지하여 인앱 자동 다운로드 및 진행률 안내가 동작하도록 합니다. 만약 서명 문제 등으로 오류가 발생하더라도 사용자가 즉시 최신 DMG를 받을 수 있도록 오류 화면에 `[수동 다운로드]` 폴백 버튼을 제공합니다.
+* **플랫폼별 버튼 문구 분기:**
+  * Windows 설치형은 업데이트 적용 시 내부적으로 NSIS 설치 프로그램이 구동되어 앱을 덮어씌우는 재설치 과정을 거치므로, 사용자에게 명확한 안내를 주기 위해 `[재설치하여 적용]`으로 표기합니다.
+  * macOS는 앱 번들 자체를 교체하므로 `[재시작하여 적용]`으로 표기합니다.
 
 ### 🚨 4) 메인 윈도우 크기와 스크롤바 방지
 * 메인 윈도우는 고정 크기 창(`resizable: false`)입니다.
@@ -84,7 +86,6 @@
 * **v0.0.5**: 자동 업데이트 UI 안내 기능 추가 및 캡처 버튼별 모던 컬러 테마 적용.
 * **v0.0.6**:
   * macOS `latest-mac.yml` 누락 해결 (`mac.target: ["dmg", "zip"]` 반영).
-  * macOS 환경을 `isPortable` 모드로 지정하여 `ShipIt` 서명 검증 충돌 원천 차단.
   * UI에 플랫폼별 태그(설치형/무설치/macOS) 표시.
 * **v0.0.7**: 캡처 시 마우스 커서 포함 토글 옵션 및 시스템 트레이 연동 추가.
 * **v0.0.8**:
@@ -92,6 +93,10 @@
   * `NativeImage`의 `scaleFactor` 중복 적용으로 인한 영역 캡처 좌표 잘림/밀림 문제 완전 해결.
 * **v0.0.9**:
   * 에이전트 개발 지침 및 아키텍처, 과거 오류 및 주의사항을 총정리한 `AGENTS.md` 구축.
+* **v0.0.10**:
+  * Windows 업데이트 다운로드 완료 버튼 문구를 실제 동작에 부합하도록 `[재설치하여 적용]`으로 변경.
+  * macOS를 무설치 모드에서 분리하여 인앱 자동 업데이트(백그라운드 다운로드, 진행률 표시, 재시작 적용) 정상 복원.
+  * 업데이트 오류 시 최신 버전을 바로 다운로드할 수 있는 `[수동 다운로드]` 폴백 버튼 추가.
 
 ---
 

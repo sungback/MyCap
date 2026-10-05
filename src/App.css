@@ -267,6 +267,8 @@
   padding: 3px 8px;
   font-size: 0.75rem;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .update-action-btn.restart {

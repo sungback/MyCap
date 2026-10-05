@@ -179,7 +179,7 @@ function App() {
           <div className="update-message downloaded">
             <span>v{updateStatus.version} 준비 완료!</span>
             <button type="button" className="update-action-btn restart" onClick={handleRestart}>
-              재시작하여 적용
+              {versionInfo?.platform === 'darwin' ? '재시작하여 적용' : '재설치하여 적용'}
             </button>
           </div>
         )}
@@ -187,6 +187,9 @@ function App() {
         {updateStatus.state === 'error' && (
           <div className="update-message error">
             <span>{updateStatus.message || '업데이트 확인 중 오류가 발생했습니다.'}</span>
+            <button type="button" className="update-action-btn" onClick={handleDownload}>
+              수동 다운로드
+            </button>
           </div>
         )}
       </footer>
