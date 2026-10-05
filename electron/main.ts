@@ -343,7 +343,7 @@ function drawCursorOnNativeImage(
     }
   }
 
-  return nativeImage.createFromBitmap(bmp, { width, height, scaleFactor })
+  return nativeImage.createFromBitmap(bmp, { width, height })
 }
 
 function overlayCursorIfVisible(
@@ -351,6 +351,13 @@ function overlayCursorIfVisible(
   display: Electron.Display,
   cursorPoint: Electron.Point,
 ): NativeImage {
+  // On Windows, desktopCapturer already captures the real system cursor natively
+  // with custom shapes, colors, and accessibility sizes. Drawing a synthetic cursor
+  // causes a duplicate cursor and must not be done.
+  if (process.platform === 'win32') {
+    return image
+  }
+
   try {
     const { bounds, scaleFactor } = display
     if (
