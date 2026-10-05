@@ -20,6 +20,7 @@ jobs:
             artifact_glob: |
               release/*.exe
               release/*.exe.blockmap
+              release/latest.yml
           - os: macos-latest
             dist_script: dist:mac
             artifact_glob: |

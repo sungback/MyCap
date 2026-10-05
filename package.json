@@ -1,7 +1,7 @@
 {
   "name": "screen-capture-app",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "간단한 크로스플랫폼 화면 캡쳐 앱",
   "author": "sam",
   "type": "module",
@@ -15,6 +15,7 @@
     "dist:mac": "npm run build && electron-builder --mac"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -36,7 +37,11 @@
   "build": {
     "appId": "com.orca1.screencaptureapp",
     "productName": "ScreenCaptureApp",
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "sungback",
+      "repo": "MyCap"
+    },
     "directories": {
       "output": "release"
     },
@@ -50,8 +55,20 @@
       "icon": "build/icon.icns"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     }
   }
 }

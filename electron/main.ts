@@ -17,6 +17,99 @@ import {
 import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { autoUpdater } from 'electron-updater'
+
+const isPortable = Boolean(
+  process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE,
+)
+
+let isManualUpdateCheck = false
+
+function setupAutoUpdater() {
+  if (VITE_DEV_SERVER_URL || !app.isPackaged) {
+    return
+  }
+
+  autoUpdater.logger = console
+
+  if (isPortable) {
+    autoUpdater.autoDownload = false
+
+    autoUpdater.on('update-available', (info) => {
+      const notification = new Notification({
+        title: '새 버전 출시 안내 (포터블)',
+        body: `새 버전(v${info.version})이 출시되었습니다.\n클릭하여 최신 버전을 다운로드하세요.`,
+      })
+      notification.on('click', () => {
+        shell.openExternal('https://github.com/sungback/MyCap/releases/latest')
+      })
+      notification.show()
+    })
+  } else {
+    autoUpdater.autoDownload = true
+    autoUpdater.autoInstallOnAppQuit = true
+
+    autoUpdater.on('update-downloaded', (info) => {
+      const notification = new Notification({
+        title: '새 업데이트 다운로드 완료',
+        body: `v${info.version} 다운로드가 완료되었습니다.\n앱을 재시작하면 최신 버전이 적용됩니다.`,
+      })
+      notification.on('click', () => {
+        ;(app as any).isQuitting = true
+        autoUpdater.quitAndInstall()
+      })
+      notification.show()
+    })
+  }
+
+  autoUpdater.on('update-not-available', () => {
+    if (isManualUpdateCheck) {
+      new Notification({
+        title: '최신 버전',
+        body: '현재 최신 버전을 사용 중입니다.',
+      }).show()
+    }
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('Update error:', err)
+    if (isManualUpdateCheck) {
+      new Notification({
+        title: '업데이트 확인 실패',
+        body: '업데이트 확인 중 오류가 발생했습니다.',
+      }).show()
+    }
+  })
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('Background update check failed:', err)
+    })
+  }, 3000)
+}
+
+function checkForUpdates(isManual = false) {
+  if (VITE_DEV_SERVER_URL || !app.isPackaged) {
+    if (isManual) {
+      new Notification({
+        title: '업데이트 확인',
+        body: '개발 모드에서는 업데이트를 확인할 수 없습니다.',
+      }).show()
+    }
+    return
+  }
+
+  isManualUpdateCheck = isManual
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('Manual update check failed:', err)
+    if (isManual) {
+      new Notification({
+        title: '업데이트 확인 실패',
+        body: '업데이트 확인 중 오류가 발생했습니다.',
+      }).show()
+    }
+  })
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -350,6 +443,7 @@ function createTray() {
       { label: '영역 선택 캡처', click: () => startRegionCapture() },
       { label: '창 캡처', click: () => startWindowCapture() },
       { type: 'separator' },
+      { label: '업데이트 확인', click: () => checkForUpdates(true) },
       { label: '창 열기', click: () => mainWindow?.show() },
       { type: 'separator' },
       {
@@ -371,6 +465,7 @@ ipcMain.handle('capture:triggerWindow', () => startWindowCapture())
 app.whenReady().then(() => {
   createWindow()
   createTray()
+  setupAutoUpdater()
 
   globalShortcut.register(FULL_CAPTURE_SHORTCUT, () => {
     captureFullScreen()
