@@ -182,9 +182,13 @@ function App() {
 
         {updateStatus.state === 'downloaded' && (
           <div className="update-message downloaded">
-            <span>v{updateStatus.version} 준비 완료!</span>
+            <span>
+              {versionInfo?.platform === 'darwin'
+                ? `v${updateStatus.version} DMG 준비 완료!`
+                : `v${updateStatus.version} 준비 완료!`}
+            </span>
             <button type="button" className="update-action-btn restart" onClick={handleRestart}>
-              {versionInfo?.platform === 'darwin' ? '재시작하여 적용' : '재설치하여 적용'}
+              {versionInfo?.platform === 'darwin' ? 'DMG 열기' : '재설치하여 적용'}
             </button>
           </div>
         )}

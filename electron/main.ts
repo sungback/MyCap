@@ -24,6 +24,9 @@ const isPortable = Boolean(
 )
 
 let isManualUpdateCheck = false
+let availableUpdateVersion: string | null = null
+let availableDmgUrl: string | null = null
+let downloadedMacDmgPath: string | null = null
 
 function broadcastUpdateStatus(status: {
   state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
@@ -65,6 +68,11 @@ function setupAutoUpdater() {
     })
   } else {
     autoUpdater.on('update-available', (info) => {
+      availableUpdateVersion = info.version
+      const dmgFile = (info.files as any[])?.find((f) => f.url?.endsWith('.dmg'))
+      const dmgFileName = dmgFile ? dmgFile.url : `ScreenCaptureApp-${info.version}-arm64.dmg`
+      availableDmgUrl = `https://github.com/sungback/MyCap/releases/download/v${info.version}/${dmgFileName}`
+
       broadcastUpdateStatus({
         state: 'available',
         version: info.version,
@@ -681,6 +689,51 @@ ipcMain.handle('capture:setIncludeCursor', (_event, value: boolean) => {
   return includeCursor
 })
 
+async function downloadMacDmg(url: string, version: string): Promise<string> {
+  const downloadsDir = app.getPath('downloads')
+  if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true })
+  const fileName = path.basename(url) || `ScreenCaptureApp-${version}-arm64.dmg`
+  const destPath = path.join(downloadsDir, fileName)
+
+  const response = await fetch(url)
+  if (!response.ok || !response.body) {
+    throw new Error(`다운로드 실패 (HTTP ${response.status})`)
+  }
+
+  const totalBytes = Number(response.headers.get('content-length')) || 0
+  let receivedBytes = 0
+
+  const fileStream = fs.createWriteStream(destPath)
+  const reader = response.body.getReader()
+  let lastReportedPercent = -1
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    fileStream.write(Buffer.from(value))
+    receivedBytes += value.length
+    if (totalBytes > 0) {
+      const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100))
+      if (percent !== lastReportedPercent) {
+        lastReportedPercent = percent
+        broadcastUpdateStatus({
+          state: 'downloading',
+          percent,
+        })
+      }
+    }
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    fileStream.end((err?: Error) => {
+      if (err) reject(err)
+      else resolve()
+    })
+  })
+
+  return destPath
+}
+
 ipcMain.handle('update:getInfo', () => ({
   version: app.getVersion(),
   isPortable,
@@ -689,6 +742,44 @@ ipcMain.handle('update:getInfo', () => ({
 ipcMain.handle('update:check', () => checkForUpdates(true))
 ipcMain.handle('update:startDownload', async () => {
   broadcastUpdateStatus({ state: 'downloading', percent: 0 })
+
+  if (process.platform === 'darwin') {
+    try {
+      const version = availableUpdateVersion || app.getVersion()
+      const url =
+        availableDmgUrl ||
+        `https://github.com/sungback/MyCap/releases/download/v${version}/ScreenCaptureApp-${version}-arm64.dmg`
+
+      const dmgPath = await downloadMacDmg(url, version)
+      downloadedMacDmgPath = dmgPath
+
+      broadcastUpdateStatus({
+        state: 'downloaded',
+        version,
+      })
+
+      const notification = new Notification({
+        title: '업데이트 다운로드 완료',
+        body: `v${version} DMG 파일 다운로드가 완료되었습니다.\n열린 DMG 창에서 앱을 응용 프로그램(Applications) 폴더로 드래그하세요.`,
+      })
+      notification.on('click', () => {
+        if (downloadedMacDmgPath && fs.existsSync(downloadedMacDmgPath)) {
+          shell.openPath(downloadedMacDmgPath)
+        }
+      })
+      notification.show()
+
+      await shell.openPath(dmgPath)
+    } catch (err: any) {
+      console.error('macOS DMG download failed:', err)
+      broadcastUpdateStatus({
+        state: 'error',
+        message: 'DMG 다운로드 중 오류가 발생했습니다. 수동 다운로드를 이용해 주세요.',
+      })
+    }
+    return
+  }
+
   try {
     await autoUpdater.downloadUpdate()
   } catch (err: any) {
@@ -699,7 +790,15 @@ ipcMain.handle('update:startDownload', async () => {
     })
   }
 })
-ipcMain.handle('update:restart', () => {
+ipcMain.handle('update:restart', async () => {
+  if (process.platform === 'darwin') {
+    if (downloadedMacDmgPath && fs.existsSync(downloadedMacDmgPath)) {
+      await shell.openPath(downloadedMacDmgPath)
+    } else {
+      shell.openExternal('https://github.com/sungback/MyCap/releases/latest')
+    }
+    return
+  }
   ;(app as any).isQuitting = true
   autoUpdater.quitAndInstall()
 })
