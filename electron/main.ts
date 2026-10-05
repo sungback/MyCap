@@ -616,7 +616,7 @@ function openEditorWindow(image: NativeImage, filePath: string) {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 440,
-    height: 540,
+    height: 580,
     resizable: false,
     autoHideMenuBar: true,
     icon: APP_ICON_PATH,

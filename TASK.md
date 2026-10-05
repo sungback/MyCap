@@ -15,23 +15,22 @@ MyCap (ScreenCaptureApp) 프로젝트의 작업 목록, 진행 상태 및 변경
 | **T-005** | macOS 캡처 이미지 저장 폴더 변경 (v0.0.11) | `DONE` | macOS에서 이미지 저장 위치를 `Pictures/ScreenCaptureApp`에서 `Downloads` 폴더로 변경 및 v0.0.11 배포 완료. |
 | **T-006** | Windows 캡처 이미지 저장 폴더 Downloads 변경 (v0.0.12) | `DONE` | Windows에서도 이미지 기본 저장 폴더를 `Downloads`(`app.getPath('downloads')`)로 일원화 변경 및 v0.0.12 배포 완료. |
 | **T-007** | 사용자 동의 기반 업데이트 다운로드 전환 (v0.0.13) | `DONE` | 무조건 자동 다운로드/설치 방지: `autoDownload = false`, `autoInstallOnAppQuit = false` 설정, 새 버전 감지 시 "새 버전(vX.X.X)이 있습니다" 알림 및 `[업데이트 다운로드]` 버튼 클릭 시 다운로드 시작 및 v0.0.13 배포 완료. |
-| **T-008** | macOS DMG 직접 다운로드 & 자동 마운트 | `DONE` | 무료/미서명 환경에서 Squirrel.Mac(ShipIt) 서명 검증 실패를 방지하기 위해 macOS에서는 DMG를 인앱에서 직접 다운로드(진행률 표시) 후 자동 마운트(`shell.openPath`)하도록 개선. |
+| **T-008** | macOS DMG 직접 다운로드 & 자동 마운트 (v0.0.14) | `DONE` | 무료/미서명 환경에서 Squirrel.Mac(ShipIt) 서명 검증 실패를 방지하기 위해 macOS에서는 DMG를 인앱에서 직접 다운로드(진행률 표시) 후 자동 마운트(`shell.openPath`)하도록 개선 및 v0.0.14 배포 완료. |
+| **T-009** | 메인 창 세로 높이 확대 (540px -> 580px) | `DONE` | UI 여백 확보 및 스크롤바 방지를 위해 메인 윈도우 높이를 540px에서 580px로 확대. |
 
 ---
 
 ## 📋 세부 구현 계획
 
-### 1. macOS DMG 직접 다운로드 & 자동 마운트 (T-008)
-* **파일:** `electron/main.ts`, `src/App.tsx`
+### 1. 메인 창 세로 높이 확대 (T-009)
+* **파일:** `electron/main.ts`, `AGENTS.md`
 * **내용:**
-  * Apple 개발자 유료 인증서가 없는 미서명 오픈소스 빌드 특성상 `Squirrel.Mac`(`ShipIt`)은 코드 서명 검증 에러를 유발함.
-  * macOS에서는 `autoUpdater.downloadUpdate()` 대신 자체 `downloadMacDmg()` 스트리밍 다운로더를 구동하여 `~/Downloads`에 DMG 다운로드 및 실시간 진행률(0~100%) 표시.
-  * 다운로드 완료 시 `shell.openPath(dmgPath)`를 통해 DMG를 자동 마운트하여 사용자가 즉시 응용 프로그램으로 드래그할 수 있도록 지원하고, `[DMG 열기]` 버튼 제공.
-  * Windows는 기존대로 NSIS 무결성 설치(`autoUpdater.downloadUpdate()` + `[재설치하여 적용]`) 유지.
+  * `createWindow()`에서 `BrowserWindow` 높이를 `height: 540`에서 `height: 580`으로 40px 확대.
+  * 업데이트 알림 및 캡처 경로 표시 시 불필요한 스크롤바 발생 원천 차단.
 
 ### 2. 문서 및 릴리스 배포
-* `AGENTS.md` 업데이트 및 `package.json` 버전 패치 (`0.0.14`).
-* 빌드/린트 검증 후 `v0.0.14` 릴리스 태그 푸시 및 GitHub Actions 배포 모니터링.
+* `AGENTS.md` 업데이트 및 `package.json` 버전 패치 (`0.0.15`).
+* 빌드/린트 검증 후 `v0.0.15` 릴리스 태그 푸시 및 GitHub Actions 배포 모니터링.
 
 ---
 
@@ -47,3 +46,4 @@ MyCap (ScreenCaptureApp) 프로젝트의 작업 목록, 진행 상태 및 변경
 * **v0.0.11**: macOS 캡처 이미지 저장 기본 경로를 `Downloads` 폴더로 변경.
 * **v0.0.12**: Windows에서도 캡처 이미지 저장 기본 경로를 `Downloads` 폴더로 일원화.
 * **v0.0.13**: 사용자 동의 기반 업데이트 다운로드 전환 (`autoDownload = false`, `autoInstallOnAppQuit = false`).
+* **v0.0.14**: macOS `Squirrel.Mac`(`ShipIt`) 서명 검증 실패 에러 원천 해결: macOS 인앱 DMG 직접 스트리밍 다운로드 및 자동 마운트 파이프라인 구축.
