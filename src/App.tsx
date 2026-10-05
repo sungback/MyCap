@@ -71,13 +71,13 @@ function App() {
       </p>
 
       <div className="button-row">
-        <button type="button" className="capture-button" onClick={handleCapture} disabled={capturing}>
+        <button type="button" className="capture-button full" onClick={handleCapture} disabled={capturing}>
           {capturing ? '캡처 중...' : '전체화면 캡처'}
         </button>
-        <button type="button" className="capture-button secondary" onClick={handleRegionCapture}>
+        <button type="button" className="capture-button region" onClick={handleRegionCapture}>
           영역 선택 캡처
         </button>
-        <button type="button" className="capture-button secondary" onClick={handleWindowCapture}>
+        <button type="button" className="capture-button window" onClick={handleWindowCapture}>
           창 캡처
         </button>
       </div>
