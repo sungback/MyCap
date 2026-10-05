@@ -49,6 +49,15 @@
 - **Windows 포터블형**: `ScreenCaptureApp-Portable-x.x.x.exe` (무설치 단일 실행 파일)
 - **macOS (Apple Silicon)**: `ScreenCaptureApp-x.x.x-arm64.dmg`
 
+> [!NOTE]
+> **macOS에서 "손상되었기 때문에 열 수 없습니다" 경고가 뜨는 경우**  
+> Apple 개발자 유료 인증서로 서명되지 않은 오픈소스 앱의 경우, macOS 보안(Gatekeeper)에 의해 실행이 차단될 수 있습니다.  
+> 앱을 `응용 프로그램` 폴더로 드래그한 뒤, **터미널(Terminal)**에서 다음 명령어를 1회 실행하시면 정상 실행됩니다:  
+> ```bash
+> xattr -cr /Applications/ScreenCaptureApp.app
+> ```
+> 또는 **[시스템 설정]** ➡️ **[개인정보 보호 및 보안]** ➡️ **[확인 없이 열기]**를 클릭해 실행할 수 있습니다.
+
 ---
 
 ## 🛠️ 기술 스택
