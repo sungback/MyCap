@@ -16,12 +16,21 @@ function App() {
     isPortable: boolean
     platform?: string
   } | null>(null)
+  const [includeCursor, setIncludeCursor] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateState>({ state: 'idle' })
 
   useEffect(() => {
     const unsubscribeCapture = window.captureApi?.onCaptureDone(({ filePath }) => {
       setLastCapture(filePath)
       setCapturing(false)
+    })
+
+    window.captureApi?.getIncludeCursor().then((val) => {
+      if (typeof val === 'boolean') setIncludeCursor(val)
+    })
+
+    const unsubscribeCursor = window.captureApi?.onCursorChanged?.((val) => {
+      setIncludeCursor(val)
     })
 
     window.updateApi?.getInfo().then((info) => {
@@ -34,6 +43,7 @@ function App() {
 
     return () => {
       unsubscribeCapture?.()
+      unsubscribeCursor?.()
       unsubscribeUpdate?.()
     }
   }, [])
@@ -49,6 +59,11 @@ function App() {
 
   const handleWindowCapture = async () => {
     await window.captureApi?.triggerWindowCapture()
+  }
+
+  const handleToggleCursor = async (checked: boolean) => {
+    setIncludeCursor(checked)
+    await window.captureApi?.setIncludeCursor(checked)
   }
 
   const handleCheckUpdate = async () => {
@@ -73,6 +88,18 @@ function App() {
         <br />
         캡처 결과는 클립보드에 자동 복사되고, 편집 창에서 화살표·사각형·텍스트·블러를 추가할 수 있습니다.
       </p>
+
+      <div className="options-row">
+        <label className="cursor-toggle">
+          <input
+            type="checkbox"
+            checked={includeCursor}
+            onChange={(e) => handleToggleCursor(e.target.checked)}
+          />
+          <span className="toggle-slider" />
+          <span className="toggle-label">마우스 커서 포함</span>
+        </label>
+      </div>
 
       <div className="button-row">
         <button type="button" className="capture-button full" onClick={handleCapture} disabled={capturing}>

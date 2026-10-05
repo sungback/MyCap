@@ -257,13 +257,133 @@ async function getPrimaryDisplayScreenshot() {
   return { primaryDisplay, image: primarySource?.thumbnail ?? null }
 }
 
+let includeCursor = false
+
+const CURSOR_TEMPLATE = [
+  'B...............',
+  'BB..............',
+  'BWB.............',
+  'BWWB............',
+  'BWWWB...........',
+  'BWWWWB..........',
+  'BWWWWWB.........',
+  'BWWWWWWB........',
+  'BWWWWWWWB.......',
+  'BWWWWWWWWB......',
+  'BWWWWWWWWWB.....',
+  'BWWWWWWWWWWB....',
+  'BWWWWWWBBBBBB...',
+  'BWWWBWWB........',
+  'BWWB..BWWB......',
+  'BWB...BWWB......',
+  'BB.....BWWB.....',
+  'B......BWWB.....',
+  '........BWWB....',
+  '........BWWB....',
+  '.........BBB....',
+]
+
+function drawCursorOnNativeImage(
+  image: NativeImage,
+  cursorX: number,
+  cursorY: number,
+  scaleFactor: number,
+): NativeImage {
+  const { width, height } = image.getSize()
+  const bmp = image.toBitmap()
+
+  const s = Math.max(1, Math.round(scaleFactor))
+  const rows = CURSOR_TEMPLATE.length
+  const cols = CURSOR_TEMPLATE[0].length
+
+  const blendPixel = (px: number, py: number, r: number, g: number, b: number, alpha: number) => {
+    if (px < 0 || px >= width || py < 0 || py >= height) return
+    const idx = (py * width + px) * 4
+    const invA = 1 - alpha
+    bmp[idx] = Math.round(b * alpha + bmp[idx] * invA)
+    bmp[idx + 1] = Math.round(g * alpha + bmp[idx + 1] * invA)
+    bmp[idx + 2] = Math.round(r * alpha + bmp[idx + 2] * invA)
+  }
+
+  // Draw soft drop shadow offset
+  const shadowOffsetX = s
+  const shadowOffsetY = Math.max(1, Math.round(s * 1.5))
+  for (let r = 0; r < rows; r++) {
+    const row = CURSOR_TEMPLATE[r]
+    for (let c = 0; c < cols; c++) {
+      const char = row[c]
+      if (char === 'B' || char === 'W') {
+        for (let dy = 0; dy < s; dy++) {
+          for (let dx = 0; dx < s; dx++) {
+            blendPixel(cursorX + c * s + dx + shadowOffsetX, cursorY + r * s + dy + shadowOffsetY, 0, 0, 0, 0.28)
+          }
+        }
+      }
+    }
+  }
+
+  // Draw cursor body
+  for (let r = 0; r < rows; r++) {
+    const row = CURSOR_TEMPLATE[r]
+    for (let c = 0; c < cols; c++) {
+      const char = row[c]
+      if (char === 'B') {
+        for (let dy = 0; dy < s; dy++) {
+          for (let dx = 0; dx < s; dx++) {
+            blendPixel(cursorX + c * s + dx, cursorY + r * s + dy, 0, 0, 0, 1.0)
+          }
+        }
+      } else if (char === 'W') {
+        for (let dy = 0; dy < s; dy++) {
+          for (let dx = 0; dx < s; dx++) {
+            blendPixel(cursorX + c * s + dx, cursorY + r * s + dy, 255, 255, 255, 1.0)
+          }
+        }
+      }
+    }
+  }
+
+  return nativeImage.createFromBitmap(bmp, { width, height, scaleFactor })
+}
+
+function overlayCursorIfVisible(
+  image: NativeImage,
+  display: Electron.Display,
+  cursorPoint: Electron.Point,
+): NativeImage {
+  try {
+    const { bounds, scaleFactor } = display
+    if (
+      cursorPoint.x < bounds.x ||
+      cursorPoint.x >= bounds.x + bounds.width ||
+      cursorPoint.y < bounds.y ||
+      cursorPoint.y >= bounds.y + bounds.height
+    ) {
+      return image
+    }
+
+    const cursorX = Math.round((cursorPoint.x - bounds.x) * scaleFactor)
+    const cursorY = Math.round((cursorPoint.y - bounds.y) * scaleFactor)
+
+    return drawCursorOnNativeImage(image, cursorX, cursorY, scaleFactor)
+  } catch (err) {
+    console.error('Failed to overlay cursor:', err)
+    return image
+  }
+}
+
 async function captureFullScreen() {
-  const { image } = await getPrimaryDisplayScreenshot()
+  const cursorPoint = screen.getCursorScreenPoint()
+  const { primaryDisplay, image } = await getPrimaryDisplayScreenshot()
   if (!image) {
     new Notification({ title: '캡처 실패', body: '캡처할 화면을 찾지 못했습니다.' }).show()
     return
   }
-  await finishCapture(image)
+  let finalImage = image
+  if (includeCursor) {
+    finalImage = overlayCursorIfVisible(image, primaryDisplay, cursorPoint)
+  }
+  await finishCapture(finalImage)
 }
 
 type SelectionRect = { x: number; y: number; width: number; height: number }
@@ -278,10 +398,16 @@ function closeOverlay() {
 async function startRegionCapture() {
   if (overlayWindow) return
 
+  const cursorPoint = screen.getCursorScreenPoint()
   const { primaryDisplay, image } = await getPrimaryDisplayScreenshot()
   if (!image) {
     new Notification({ title: '캡처 실패', body: '캡처할 화면을 찾지 못했습니다.' }).show()
     return
+  }
+
+  let baseImage = image
+  if (includeCursor) {
+    baseImage = overlayCursorIfVisible(image, primaryDisplay, cursorPoint)
   }
 
   const { bounds, scaleFactor } = primaryDisplay
@@ -307,7 +433,7 @@ async function startRegionCapture() {
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   overlayWindow.focus()
 
-  const dataUrl = image.toDataURL()
+  const dataUrl = baseImage.toDataURL()
 
   overlayWindow.webContents.once('did-finish-load', () => {
     overlayWindow?.webContents.send('overlay:init', {
@@ -329,7 +455,7 @@ async function startRegionCapture() {
       width: Math.round(rect.width * scaleFactor),
       height: Math.round(rect.height * scaleFactor),
     }
-    const cropped = image.crop(pixelRect)
+    const cropped = baseImage.crop(pixelRect)
     await finishCapture(cropped)
   })
 
@@ -468,7 +594,7 @@ function openEditorWindow(image: NativeImage, filePath: string) {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 440,
-    height: 510,
+    height: 540,
     resizable: false,
     autoHideMenuBar: true,
     icon: APP_ICON_PATH,
@@ -487,34 +613,59 @@ function createWindow() {
   loadPage(mainWindow, 'index.html')
 }
 
+function buildTrayMenu() {
+  return Menu.buildFromTemplate([
+    { label: '전체화면 캡처', click: () => captureFullScreen() },
+    { label: '영역 선택 캡처', click: () => startRegionCapture() },
+    { label: '창 캡처', click: () => startWindowCapture() },
+    { type: 'separator' },
+    {
+      label: '마우스 커서 포함',
+      type: 'checkbox',
+      checked: includeCursor,
+      click: (menuItem) => {
+        includeCursor = menuItem.checked
+        updateTrayMenu()
+        mainWindow?.webContents.send('capture:cursorChanged', includeCursor)
+      },
+    },
+    { type: 'separator' },
+    { label: '업데이트 확인', click: () => checkForUpdates(true) },
+    { label: '창 열기', click: () => mainWindow?.show() },
+    { type: 'separator' },
+    {
+      label: '종료',
+      click: () => {
+        ;(app as any).isQuitting = true
+        app.quit()
+      },
+    },
+  ])
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+  tray.setContextMenu(buildTrayMenu())
+}
+
 function createTray() {
   const icon = nativeImage.createFromPath(APP_ICON_PATH).resize({ width: 32, height: 32 })
   tray = new Tray(icon)
   tray.setToolTip('화면 캡쳐 앱')
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: '전체화면 캡처', click: () => captureFullScreen() },
-      { label: '영역 선택 캡처', click: () => startRegionCapture() },
-      { label: '창 캡처', click: () => startWindowCapture() },
-      { type: 'separator' },
-      { label: '업데이트 확인', click: () => checkForUpdates(true) },
-      { label: '창 열기', click: () => mainWindow?.show() },
-      { type: 'separator' },
-      {
-        label: '종료',
-        click: () => {
-          ;(app as any).isQuitting = true
-          app.quit()
-        },
-      },
-    ]),
-  )
+  updateTrayMenu()
   tray.on('click', () => mainWindow?.show())
 }
 
 ipcMain.handle('capture:trigger', () => captureFullScreen())
 ipcMain.handle('capture:triggerRegion', () => startRegionCapture())
 ipcMain.handle('capture:triggerWindow', () => startWindowCapture())
+ipcMain.handle('capture:getIncludeCursor', () => includeCursor)
+ipcMain.handle('capture:setIncludeCursor', (_event, value: boolean) => {
+  includeCursor = Boolean(value)
+  updateTrayMenu()
+  mainWindow?.webContents.send('capture:cursorChanged', includeCursor)
+  return includeCursor
+})
 
 ipcMain.handle('update:getInfo', () => ({
   version: app.getVersion(),

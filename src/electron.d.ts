@@ -6,6 +6,9 @@ declare global {
       triggerCapture: () => Promise<void>
       triggerRegionCapture: () => Promise<void>
       triggerWindowCapture: () => Promise<void>
+      getIncludeCursor: () => Promise<boolean>
+      setIncludeCursor: (value: boolean) => Promise<boolean>
+      onCursorChanged: (callback: (includeCursor: boolean) => void) => () => void
       onCaptureDone: (callback: (payload: { filePath: string }) => void) => () => void
     }
     overlayApi?: {

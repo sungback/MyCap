@@ -4,6 +4,13 @@ contextBridge.exposeInMainWorld('captureApi', {
   triggerCapture: () => ipcRenderer.invoke('capture:trigger'),
   triggerRegionCapture: () => ipcRenderer.invoke('capture:triggerRegion'),
   triggerWindowCapture: () => ipcRenderer.invoke('capture:triggerWindow'),
+  getIncludeCursor: () => ipcRenderer.invoke('capture:getIncludeCursor'),
+  setIncludeCursor: (value: boolean) => ipcRenderer.invoke('capture:setIncludeCursor', value),
+  onCursorChanged: (callback: (includeCursor: boolean) => void) => {
+    const listener = (_event: unknown, val: boolean) => callback(val)
+    ipcRenderer.on('capture:cursorChanged', listener)
+    return () => ipcRenderer.removeListener('capture:cursorChanged', listener)
+  },
   onCaptureDone: (callback: (payload: { filePath: string }) => void) => {
     const listener = (_event: unknown, payload: { filePath: string }) => callback(payload)
     ipcRenderer.on('capture:done', listener)
