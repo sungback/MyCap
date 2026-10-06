@@ -16,6 +16,8 @@ import {
 } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { autoUpdater } from 'electron-updater'
 
@@ -703,33 +705,25 @@ async function downloadMacDmg(url: string, version: string): Promise<string> {
   const totalBytes = Number(response.headers.get('content-length')) || 0
   let receivedBytes = 0
 
-  const fileStream = fs.createWriteStream(destPath)
-  const reader = response.body.getReader()
+  const source = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream)
   let lastReportedPercent = -1
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    fileStream.write(Buffer.from(value))
-    receivedBytes += value.length
-    if (totalBytes > 0) {
-      const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100))
-      if (percent !== lastReportedPercent) {
-        lastReportedPercent = percent
-        broadcastUpdateStatus({
-          state: 'downloading',
-          percent,
-        })
-      }
+  source.on('data', (chunk: Buffer) => {
+    receivedBytes += chunk.length
+    if (totalBytes <= 0) return
+    const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100))
+    if (percent !== lastReportedPercent) {
+      lastReportedPercent = percent
+      broadcastUpdateStatus({ state: 'downloading', percent })
     }
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    fileStream.end((err?: Error) => {
-      if (err) reject(err)
-      else resolve()
-    })
   })
+
+  try {
+    // pipeline: backpressure 처리 + 양쪽 스트림 오류를 reject로 전달
+    await pipeline(source, fs.createWriteStream(destPath))
+  } catch (err) {
+    fs.rmSync(destPath, { force: true }) // 불완전한 DMG 제거
+    throw err
+  }
 
   return destPath
 }
