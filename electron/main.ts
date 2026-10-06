@@ -385,33 +385,98 @@ function drawCursorOnNativeImage(
   return nativeImage.createFromBitmap(bmp, { width, height })
 }
 
+// Windows: 주 모니터를 물리 픽셀 크기로 캡처한 뒤 실제 시스템 커서 핸들(색/모양/크기 그대로)을 DrawIconEx로 그린다.
+const WIN_CURSOR_CAPTURE_PS = `
+param([string]$out)
+Add-Type -AssemblyName System.Drawing
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class MyCapCursor {
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x; public int y; }
+  [StructLayout(LayoutKind.Sequential)] public struct CURSORINFO { public int cbSize; public int flags; public IntPtr hCursor; public POINT pt; }
+  [StructLayout(LayoutKind.Sequential)] public struct ICONINFO { public bool fIcon; public int xHotspot; public int yHotspot; public IntPtr hbmMask; public IntPtr hbmColor; }
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
+  [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CURSORINFO p);
+  [DllImport("user32.dll")] public static extern bool GetIconInfo(IntPtr h, out ICONINFO i);
+  [DllImport("user32.dll")] public static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr h, int w, int hh, int step, IntPtr br, int flags);
+  [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr o);
+}
+'@
+[void][MyCapCursor]::SetProcessDPIAware()
+$w = [MyCapCursor]::GetSystemMetrics(0)
+$h = [MyCapCursor]::GetSystemMetrics(1)
+$bmp = New-Object System.Drawing.Bitmap $w, $h
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen(0, 0, 0, 0, (New-Object System.Drawing.Size $w, $h))
+$ci = New-Object MyCapCursor+CURSORINFO
+$ci.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($ci)
+if ([MyCapCursor]::GetCursorInfo([ref]$ci) -and ($ci.flags -band 1)) {
+  $ii = New-Object MyCapCursor+ICONINFO
+  if ([MyCapCursor]::GetIconInfo($ci.hCursor, [ref]$ii)) {
+    $hdc = $g.GetHdc()
+    [void][MyCapCursor]::DrawIconEx($hdc, $ci.pt.x - $ii.xHotspot, $ci.pt.y - $ii.yHotspot, $ci.hCursor, 0, 0, 0, [IntPtr]::Zero, 3)
+    $g.ReleaseHdc($hdc)
+    if ($ii.hbmMask -ne [IntPtr]::Zero) { [void][MyCapCursor]::DeleteObject($ii.hbmMask) }
+    if ($ii.hbmColor -ne [IntPtr]::Zero) { [void][MyCapCursor]::DeleteObject($ii.hbmColor) }
+  }
+}
+$g.Dispose()
+$bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
+$bmp.Dispose()
+`
+
+// 실제 커서가 포함된 이미지를 만들어 주는 외부 명령을 실행한다. 크기가 다르거나 실패하면 null.
+async function captureWithRealCursor(
+  image: NativeImage,
+  run: (outPath: string) => Promise<unknown>,
+): Promise<NativeImage | null> {
+  const tmp = path.join(os.tmpdir(), `mycap-cursor-${process.pid}.png`)
+  try {
+    await run(tmp)
+    const real = nativeImage.createFromPath(tmp)
+    const a = real.getSize()
+    const b = image.getSize()
+    return a.width === b.width && a.height === b.height ? real : null
+  } catch (err) {
+    console.error('Real cursor capture failed:', err)
+    return null
+  } finally {
+    fs.rmSync(tmp, { force: true })
+  }
+}
+
 async function overlayCursorIfVisible(
   image: NativeImage,
   display: Electron.Display,
   cursorPoint: Electron.Point,
 ): Promise<NativeImage> {
-  // On Windows, desktopCapturer already captures the real system cursor natively
-  // with custom shapes, colors, and accessibility sizes. Drawing a synthetic cursor
-  // causes a duplicate cursor and must not be done.
+  // desktopCapturer는 환경에 따라 커서를 빼므로, 두 OS 모두 실제 커서가 담긴 이미지로 교체한다.
+  // 이미지를 통째로 교체하므로 커서가 이중으로 그려지지 않는다. 실패하면 Windows는 원본을 그대로 쓴다.
   if (process.platform === 'win32') {
-    return image
+    const ps1 = path.join(os.tmpdir(), `mycap-cursor-${process.pid}.ps1`)
+    fs.writeFileSync(ps1, WIN_CURSOR_CAPTURE_PS)
+    try {
+      const real = await captureWithRealCursor(image, (out) =>
+        execFileAsync(
+          'powershell.exe',
+          ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1, out],
+          { windowsHide: true },
+        ),
+      )
+      return real ?? image
+    } finally {
+      fs.rmSync(ps1, { force: true })
+    }
   }
 
-  // macOS: desktopCapturer는 커서를 빼므로, 실제 커서(색/크기 포함)를 그려 주는 screencapture -C 결과를 쓴다.
-  // 크기가 다르거나 실패하면 아래 합성 커서로 대체한다.
+  // macOS: 실제 커서(색/크기 포함)를 그려 주는 screencapture -C 결과를 쓴다. 실패하면 아래 합성 커서로 대체한다.
   if (process.platform === 'darwin') {
-    const tmp = path.join(os.tmpdir(), `mycap-cursor-${process.pid}.png`)
-    try {
-      await execFileAsync('/usr/sbin/screencapture', ['-C', '-x', tmp])
-      const real = nativeImage.createFromPath(tmp)
-      const a = real.getSize()
-      const b = image.getSize()
-      if (a.width === b.width && a.height === b.height) return real
-    } catch (err) {
-      console.error('screencapture -C failed, using synthetic cursor:', err)
-    } finally {
-      fs.rmSync(tmp, { force: true })
-    }
+    const real = await captureWithRealCursor(image, (out) =>
+      execFileAsync('/usr/sbin/screencapture', ['-C', '-x', out]),
+    )
+    if (real) return real
   }
 
   try {

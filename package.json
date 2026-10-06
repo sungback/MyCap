@@ -1,7 +1,7 @@
 {
   "name": "screen-capture-app",
   "private": true,
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "간단한 크로스플랫폼 화면 캡쳐 앱",
   "author": "sam",
   "type": "module",
