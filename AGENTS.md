@@ -71,12 +71,14 @@
 * **사용자 동의 기반 업데이트 다운로드:**
   * 사용자 모르게 백그라운드에서 임의로 데이터를 다운로드하거나 앱 종료 시 설치 마법사가 강제 실행되는 것을 막기 위해 `autoDownload = false`, `autoInstallOnAppQuit = false`를 적용합니다.
   * 새 버전 감지 시 "새 버전(vX.X.X)이 있습니다" 알림 및 UI를 제공하며, 사용자가 직접 **`[업데이트 다운로드]`** 버튼을 눌러야만 다운로드가 시작됩니다.
-* **macOS Squirrel.Mac(ShipIt) 서명 제약 및 DMG 인앱 다운로드 해결책:**
-  * macOS의 기본 `electron-updater` 백그라운드 엔진인 `Squirrel.Mac (ShipIt)`은 Apple 유료 개발자 계정의 Developer ID 인증서 서명을 강제합니다. 미서명 오픈소스 빌드에서 `autoUpdater.downloadUpdate()`를 호출하면 OS 레벨에서 `ShipIt` 서명 검증 실패 에러(`did not pass validation`)가 발생합니다.
-  * **해결책:** macOS에서는 `Squirrel.Mac`을 우회하여, `update:startDownload` 호출 시 최신 `.dmg` 파일을 `~/Downloads`로 인앱 스트리밍 다운로드(실시간 진행률 0~100% 표시)합니다. 다운로드가 완료되면 `shell.openPath()`로 DMG를 자동 마운트하여 사용자가 즉시 응용 프로그램으로 드래그할 수 있도록 하며, UI에는 **`[DMG 열기]`** 버튼을 제공합니다.
+* **macOS Squirrel.Mac(ShipIt) 서명 제약 및 zip 자체 교체 해결책:**
+  * macOS의 기본 `electron-updater` 백그라운드 엔진인 `Squirrel.Mac (ShipIt)`은 Apple 유료 개발자 계정의 Developer ID 인증서 서명을 강제합니다. 미서명(ad-hoc) 빌드에서 `autoUpdater.downloadUpdate()`를 호출하면 `did not pass validation` 에러가 발생합니다.
+  * **해결책:** macOS에서는 `Squirrel.Mac`을 우회합니다. `update:startDownload` 시 릴리스의 `*-mac.zip`을 임시 폴더로 스트리밍 다운로드(진행률 0~100%)하고 `latest-mac.yml`의 sha512로 검증한 뒤 `ditto`로 압축을 풀어 둡니다. `[재시작하여 적용]` 클릭 시 분리된 `/bin/sh` 스크립트가 앱 종료를 기다렸다가 현재 `.app`을 교체하고 `open`으로 재실행합니다. (Node `fetch`로 받은 파일은 quarantine 속성이 없어 Gatekeeper 경고가 없습니다.)
+  * **보안 한계:** 서명 검증 없이 같은 GitHub 릴리스의 sha512만 비교하므로 릴리스 계정이 탈취되면 보호되지 않습니다. Developer ID 서명·공증을 도입하면 `Squirrel.Mac`으로 되돌리는 것을 검토합니다.
+  * 설치 폴더에 쓰기 권한이 없으면 자동 교체 대신 릴리스 페이지를 엽니다.
 * **플랫폼별 버튼 문구 분기:**
   * Windows 설치형은 업데이트 적용 시 내부적으로 NSIS 설치 프로그램이 구동되어 앱을 덮어씌우는 재설치 과정을 거치므로 `[재설치하여 적용]`으로 표기합니다.
-  * macOS는 다운로드된 DMG를 열어 설치하므로 `[DMG 열기]`로 표기합니다.
+  * macOS는 앱을 종료·교체·재실행하므로 `[재시작하여 적용]`으로 표기합니다.
 
 ### 🚨 4) 메인 윈도우 크기와 스크롤바 방지
 * 메인 윈도우는 고정 크기 창(`resizable: false`)입니다.
@@ -116,6 +118,9 @@
   * macOS `Squirrel.Mac`(`ShipIt`) 서명 검증 실패 에러 원천 해결: macOS 인앱 DMG 직접 스트리밍 다운로드(0~100% 진행률 표시) 및 자동 마운트(`shell.openPath`) 파이프라인 구축. 완료 시 `[DMG 열기]` 버튼 제공.
 * **v0.0.15**:
   * 메인 창 세로 높이를 540px에서 580px로 확대하여 UI 여백 확보 및 불필요한 스크롤바 방지.
+* **v0.0.16**: macOS 다운로드 스트림을 `pipeline`으로 보강(backpressure, 오류 전파, 불완전 파일 제거).
+* **v0.0.18**: Windows 업데이트를 `quitAndInstall(true, true)`로 무음 설치 + 자동 재실행.
+* **v0.0.19**: macOS를 DMG 드래그 방식에서 zip 다운로드 → 앱 번들 자동 교체 → 재실행 방식으로 변경.
 
 ---
 

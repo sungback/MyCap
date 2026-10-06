@@ -18,6 +18,10 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { execFile, spawn } from 'node:child_process'
+import { promisify } from 'node:util'
+import crypto from 'node:crypto'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { autoUpdater } from 'electron-updater'
 
@@ -27,8 +31,9 @@ const isPortable = Boolean(
 
 let isManualUpdateCheck = false
 let availableUpdateVersion: string | null = null
-let availableDmgUrl: string | null = null
-let downloadedMacDmgPath: string | null = null
+let availableZipUrl: string | null = null
+let availableZipSha512: string | null = null
+let stagedMacApp: string | null = null
 
 function broadcastUpdateStatus(status: {
   state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'
@@ -71,9 +76,10 @@ function setupAutoUpdater() {
   } else {
     autoUpdater.on('update-available', (info) => {
       availableUpdateVersion = info.version
-      const dmgFile = (info.files as any[])?.find((f) => f.url?.endsWith('.dmg'))
-      const dmgFileName = dmgFile ? dmgFile.url : `ScreenCaptureApp-${info.version}-arm64.dmg`
-      availableDmgUrl = `https://github.com/sungback/MyCap/releases/download/v${info.version}/${dmgFileName}`
+      const zipFile = (info.files as any[])?.find((f) => f.url?.endsWith('-mac.zip'))
+      const zipFileName = zipFile ? zipFile.url : `ScreenCaptureApp-${info.version}-arm64-mac.zip`
+      availableZipUrl = `https://github.com/sungback/MyCap/releases/download/v${info.version}/${zipFileName}`
+      availableZipSha512 = zipFile?.sha512 ?? null
 
       broadcastUpdateStatus({
         state: 'available',
@@ -102,12 +108,9 @@ function setupAutoUpdater() {
         state: 'downloaded',
         version: info.version,
       })
-      const isMac = process.platform === 'darwin'
       const notification = new Notification({
         title: '새 업데이트 다운로드 완료',
-        body: isMac
-          ? `v${info.version} 다운로드가 완료되었습니다.\n앱을 재시작하면 최신 버전이 적용됩니다.`
-          : `v${info.version} 다운로드가 완료되었습니다.\n재설치를 진행하여 최신 버전을 적용하세요.`,
+        body: `v${info.version} 다운로드가 완료되었습니다.\n재설치를 진행하여 최신 버전을 적용하세요.`,
       })
       notification.on('click', () => {
         ;(app as any).isQuitting = true
@@ -691,12 +694,9 @@ ipcMain.handle('capture:setIncludeCursor', (_event, value: boolean) => {
   return includeCursor
 })
 
-async function downloadMacDmg(url: string, version: string): Promise<string> {
-  const downloadsDir = app.getPath('downloads')
-  if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true })
-  const fileName = path.basename(url) || `ScreenCaptureApp-${version}-arm64.dmg`
-  const destPath = path.join(downloadsDir, fileName)
+const execFileAsync = promisify(execFile)
 
+async function downloadFile(url: string, destPath: string): Promise<void> {
   const response = await fetch(url)
   if (!response.ok || !response.body) {
     throw new Error(`다운로드 실패 (HTTP ${response.status})`)
@@ -717,15 +717,54 @@ async function downloadMacDmg(url: string, version: string): Promise<string> {
     }
   })
 
+  // pipeline: backpressure 처리 + 양쪽 스트림 오류를 reject로 전달
+  await pipeline(source, fs.createWriteStream(destPath))
+}
+
+// macOS: zip을 받아 검증/압축 해제만 해 두고, 적용은 앱 종료 후 스크립트가 수행한다.
+// (미서명 빌드라 Squirrel.Mac(ShipIt)을 쓸 수 없다)
+async function stageMacUpdate(url: string, sha512: string | null): Promise<string> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mycap-update-'))
   try {
-    // pipeline: backpressure 처리 + 양쪽 스트림 오류를 reject로 전달
-    await pipeline(source, fs.createWriteStream(destPath))
+    const zipPath = path.join(dir, 'update.zip')
+    await downloadFile(url, zipPath)
+
+    if (sha512) {
+      const actual = crypto.createHash('sha512').update(fs.readFileSync(zipPath)).digest('base64')
+      if (actual !== sha512) throw new Error('다운로드 파일 해시가 일치하지 않습니다.')
+    }
+
+    const outDir = path.join(dir, 'out')
+    await execFileAsync('/usr/bin/ditto', ['-x', '-k', zipPath, outDir])
+    const appName = fs.readdirSync(outDir).find((n) => n.endsWith('.app'))
+    if (!appName) throw new Error('압축 파일에서 앱을 찾을 수 없습니다.')
+    return path.join(outDir, appName)
   } catch (err) {
-    fs.rmSync(destPath, { force: true }) // 불완전한 DMG 제거
+    fs.rmSync(dir, { recursive: true, force: true }) // 불완전한 파일 제거
     throw err
   }
+}
 
-  return destPath
+function applyMacUpdate(): boolean {
+  const target = path.resolve(app.getPath('exe'), '../../..')
+  if (!stagedMacApp || !fs.existsSync(stagedMacApp) || !target.endsWith('.app')) return false
+  try {
+    fs.accessSync(path.dirname(target), fs.constants.W_OK)
+  } catch {
+    return false
+  }
+
+  // 앱이 종료될 때까지 기다린 뒤 교체하고 다시 실행한다. 복사 실패 시 기존 앱을 그대로 실행한다.
+  const script =
+    'while kill -0 "$1" 2>/dev/null; do sleep 0.5; done; ' +
+    'ditto "$2" "$3.new" && rm -rf "$3" && mv "$3.new" "$3"; open "$3"'
+  spawn('/bin/sh', ['-c', script, 'sh', String(process.pid), stagedMacApp, target], {
+    detached: true,
+    stdio: 'ignore',
+  }).unref()
+  ;(app as any).isQuitting = true
+  app.quit()
+  return true
 }
 
 ipcMain.handle('update:getInfo', () => ({
@@ -741,11 +780,10 @@ ipcMain.handle('update:startDownload', async () => {
     try {
       const version = availableUpdateVersion || app.getVersion()
       const url =
-        availableDmgUrl ||
-        `https://github.com/sungback/MyCap/releases/download/v${version}/ScreenCaptureApp-${version}-arm64.dmg`
+        availableZipUrl ||
+        `https://github.com/sungback/MyCap/releases/download/v${version}/ScreenCaptureApp-${version}-arm64-mac.zip`
 
-      const dmgPath = await downloadMacDmg(url, version)
-      downloadedMacDmgPath = dmgPath
+      stagedMacApp = await stageMacUpdate(url, availableZipSha512)
 
       broadcastUpdateStatus({
         state: 'downloaded',
@@ -754,21 +792,17 @@ ipcMain.handle('update:startDownload', async () => {
 
       const notification = new Notification({
         title: '업데이트 다운로드 완료',
-        body: `v${version} DMG 파일 다운로드가 완료되었습니다.\n열린 DMG 창에서 앱을 응용 프로그램(Applications) 폴더로 드래그하세요.`,
+        body: `v${version} 다운로드가 완료되었습니다.\n클릭하면 앱을 재시작하며 최신 버전이 적용됩니다.`,
       })
       notification.on('click', () => {
-        if (downloadedMacDmgPath && fs.existsSync(downloadedMacDmgPath)) {
-          shell.openPath(downloadedMacDmgPath)
-        }
+        applyMacUpdate()
       })
       notification.show()
-
-      await shell.openPath(dmgPath)
     } catch (err: any) {
-      console.error('macOS DMG download failed:', err)
+      console.error('macOS update download failed:', err)
       broadcastUpdateStatus({
         state: 'error',
-        message: 'DMG 다운로드 중 오류가 발생했습니다. 수동 다운로드를 이용해 주세요.',
+        message: '업데이트 다운로드 중 오류가 발생했습니다. 수동 다운로드를 이용해 주세요.',
       })
     }
     return
@@ -786,9 +820,8 @@ ipcMain.handle('update:startDownload', async () => {
 })
 ipcMain.handle('update:restart', async () => {
   if (process.platform === 'darwin') {
-    if (downloadedMacDmgPath && fs.existsSync(downloadedMacDmgPath)) {
-      await shell.openPath(downloadedMacDmgPath)
-    } else {
+    if (!applyMacUpdate()) {
+      // /Applications 쓰기 권한이 없는 등 자동 교체가 불가능한 경우
       shell.openExternal('https://github.com/sungback/MyCap/releases/latest')
     }
     return
