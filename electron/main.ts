@@ -111,7 +111,7 @@ function setupAutoUpdater() {
       })
       notification.on('click', () => {
         ;(app as any).isQuitting = true
-        autoUpdater.quitAndInstall()
+        autoUpdater.quitAndInstall(true, true)
       })
       notification.show()
     })
@@ -794,7 +794,7 @@ ipcMain.handle('update:restart', async () => {
     return
   }
   ;(app as any).isQuitting = true
-  autoUpdater.quitAndInstall()
+  autoUpdater.quitAndInstall(true, true)
 })
 ipcMain.handle('update:openDownloadPage', () => {
   shell.openExternal('https://github.com/sungback/MyCap/releases/latest')
