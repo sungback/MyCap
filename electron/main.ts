@@ -277,7 +277,26 @@ async function getPrimaryDisplayScreenshot() {
   return { primaryDisplay, image: primarySource?.thumbnail ?? null }
 }
 
-let includeCursor = false
+const settingsPath = path.join(app.getPath('userData'), 'settings.json')
+
+function loadIncludeCursor(): boolean {
+  try {
+    return JSON.parse(fs.readFileSync(settingsPath, 'utf8')).includeCursor === true
+  } catch {
+    return false // 파일이 없거나 손상된 경우 기본값
+  }
+}
+
+function setIncludeCursor(value: boolean) {
+  includeCursor = value
+  try {
+    fs.writeFileSync(settingsPath, JSON.stringify({ includeCursor }))
+  } catch (err) {
+    console.error('Failed to save settings:', err)
+  }
+}
+
+let includeCursor = loadIncludeCursor()
 
 const CURSOR_TEMPLATE = [
   'B...............',
@@ -668,7 +687,7 @@ function buildTrayMenu() {
       type: 'checkbox',
       checked: includeCursor,
       click: (menuItem) => {
-        includeCursor = menuItem.checked
+        setIncludeCursor(menuItem.checked)
         updateTrayMenu()
         mainWindow?.webContents.send('capture:cursorChanged', includeCursor)
       },
@@ -705,7 +724,7 @@ ipcMain.handle('capture:triggerRegion', () => startRegionCapture())
 ipcMain.handle('capture:triggerWindow', () => startWindowCapture())
 ipcMain.handle('capture:getIncludeCursor', () => includeCursor)
 ipcMain.handle('capture:setIncludeCursor', (_event, value: boolean) => {
-  includeCursor = Boolean(value)
+  setIncludeCursor(Boolean(value))
   updateTrayMenu()
   mainWindow?.webContents.send('capture:cursorChanged', includeCursor)
   return includeCursor

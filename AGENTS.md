@@ -123,6 +123,7 @@
 * **v0.0.18**: Windows 업데이트를 `quitAndInstall(true, true)`로 무음 설치 + 자동 재실행.
 * **v0.0.19**: macOS를 DMG 드래그 방식에서 zip 다운로드 → 앱 번들 자동 교체 → 재실행 방식으로 변경.
 * **v0.0.20**: macOS에서 커서 포함 캡처 시 실제 커서 색상이 유지되도록 `screencapture -C` 사용(기존 흰색 합성 커서 문제 해결).
+* **v0.0.21**: 마우스 커서 포함 토글 설정을 `userData/settings.json`에 저장하여 재시작 후에도 유지.
 
 ---
 
