@@ -395,12 +395,15 @@ using System.Runtime.InteropServices;
 public class MyCapCursor {
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x; public int y; }
   [StructLayout(LayoutKind.Sequential)] public struct CURSORINFO { public int cbSize; public int flags; public IntPtr hCursor; public POINT pt; }
+  [StructLayout(LayoutKind.Sequential)] public struct BITMAP { public int bmType; public int bmWidth; public int bmHeight; public int bmWidthBytes; public ushort bmPlanes; public ushort bmBitsPixel; public IntPtr bmBits; }
   [StructLayout(LayoutKind.Sequential)] public struct ICONINFO { public bool fIcon; public int xHotspot; public int yHotspot; public IntPtr hbmMask; public IntPtr hbmColor; }
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
   [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CURSORINFO p);
   [DllImport("user32.dll")] public static extern bool GetIconInfo(IntPtr h, out ICONINFO i);
   [DllImport("user32.dll")] public static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr h, int w, int hh, int step, IntPtr br, int flags);
+  [DllImport("user32.dll")] public static extern uint GetDpiForSystem();
+  [DllImport("gdi32.dll")] public static extern int GetObject(IntPtr h, int c, ref BITMAP b);
   [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr o);
 }
 '@
@@ -410,13 +413,25 @@ $h = [MyCapCursor]::GetSystemMetrics(1)
 $bmp = New-Object System.Drawing.Bitmap $w, $h
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.CopyFromScreen(0, 0, 0, 0, (New-Object System.Drawing.Size $w, $h))
+# 접근성 "포인터 크기" 설정(CursorBaseSize)과 DPI 배율을 반영한 실제 표시 크기
+$base = 32
+try { $base = [int](Get-ItemPropertyValue 'HKCU:\\Control Panel\\Cursors' -Name CursorBaseSize) } catch {}
+$target = [int][math]::Round($base * [MyCapCursor]::GetDpiForSystem() / 96)
 $ci = New-Object MyCapCursor+CURSORINFO
 $ci.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($ci)
 if ([MyCapCursor]::GetCursorInfo([ref]$ci) -and ($ci.flags -band 1)) {
   $ii = New-Object MyCapCursor+ICONINFO
   if ([MyCapCursor]::GetIconInfo($ci.hCursor, [ref]$ii)) {
+    $bm = New-Object MyCapCursor+BITMAP
+    $src = $ii.hbmColor
+    if ($src -eq [IntPtr]::Zero) { $src = $ii.hbmMask }
+    [void][MyCapCursor]::GetObject($src, [System.Runtime.InteropServices.Marshal]::SizeOf($bm), [ref]$bm)
+    $nat = $bm.bmWidth
+    if ($nat -lt 1) { $nat = 32 }
+    $size = [math]::Max($nat, $target)
+    $k = $size / $nat
     $hdc = $g.GetHdc()
-    [void][MyCapCursor]::DrawIconEx($hdc, $ci.pt.x - $ii.xHotspot, $ci.pt.y - $ii.yHotspot, $ci.hCursor, 0, 0, 0, [IntPtr]::Zero, 3)
+    [void][MyCapCursor]::DrawIconEx($hdc, $ci.pt.x - [int][math]::Round($ii.xHotspot * $k), $ci.pt.y - [int][math]::Round($ii.yHotspot * $k), $ci.hCursor, $size, $size, 0, [IntPtr]::Zero, 3)
     $g.ReleaseHdc($hdc)
     if ($ii.hbmMask -ne [IntPtr]::Zero) { [void][MyCapCursor]::DeleteObject($ii.hbmMask) }
     if ($ii.hbmColor -ne [IntPtr]::Zero) { [void][MyCapCursor]::DeleteObject($ii.hbmColor) }
