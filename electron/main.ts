@@ -366,16 +366,33 @@ function drawCursorOnNativeImage(
   return nativeImage.createFromBitmap(bmp, { width, height })
 }
 
-function overlayCursorIfVisible(
+async function overlayCursorIfVisible(
   image: NativeImage,
   display: Electron.Display,
   cursorPoint: Electron.Point,
-): NativeImage {
+): Promise<NativeImage> {
   // On Windows, desktopCapturer already captures the real system cursor natively
   // with custom shapes, colors, and accessibility sizes. Drawing a synthetic cursor
   // causes a duplicate cursor and must not be done.
   if (process.platform === 'win32') {
     return image
+  }
+
+  // macOS: desktopCapturer는 커서를 빼므로, 실제 커서(색/크기 포함)를 그려 주는 screencapture -C 결과를 쓴다.
+  // 크기가 다르거나 실패하면 아래 합성 커서로 대체한다.
+  if (process.platform === 'darwin') {
+    const tmp = path.join(os.tmpdir(), `mycap-cursor-${process.pid}.png`)
+    try {
+      await execFileAsync('/usr/sbin/screencapture', ['-C', '-x', tmp])
+      const real = nativeImage.createFromPath(tmp)
+      const a = real.getSize()
+      const b = image.getSize()
+      if (a.width === b.width && a.height === b.height) return real
+    } catch (err) {
+      console.error('screencapture -C failed, using synthetic cursor:', err)
+    } finally {
+      fs.rmSync(tmp, { force: true })
+    }
   }
 
   try {
@@ -408,7 +425,7 @@ async function captureFullScreen() {
   }
   let finalImage = image
   if (includeCursor) {
-    finalImage = overlayCursorIfVisible(image, primaryDisplay, cursorPoint)
+    finalImage = await overlayCursorIfVisible(image, primaryDisplay, cursorPoint)
   }
   await finishCapture(finalImage)
 }
@@ -434,7 +451,7 @@ async function startRegionCapture() {
 
   let baseImage = image
   if (includeCursor) {
-    baseImage = overlayCursorIfVisible(image, primaryDisplay, cursorPoint)
+    baseImage = await overlayCursorIfVisible(image, primaryDisplay, cursorPoint)
   }
 
   const { bounds, scaleFactor } = primaryDisplay

@@ -59,6 +59,7 @@
   * **주의:** `drawCursorOnNativeImage`와 같은 인위적인 화살표 커서(`CURSOR_TEMPLATE`)를 비트맵 위에 임의로 덧그리면 **이중 마우스 커서(실제 커서 + 하얀 가짜 마우스)**가 발생합니다. Windows 환경에서는 인위적인 커서 합성을 절대 수행하지 마십시오.
 * **macOS (`darwin`):**
   * macOS `desktopCapturer`는 시스템 커서를 포함하지 않습니다.
+  * 커서 포함 옵션이 켜져 있으면 `/usr/sbin/screencapture -C`로 실제 커서(사용자 지정 색상 포함)가 담긴 이미지를 받아 사용합니다. 크기가 다르거나 실패하면 합성 화살표 커서(`drawCursorOnNativeImage`)로 대체합니다.
 
 ### 🚨 2) `NativeImage`의 `scaleFactor`와 `crop()` 좌표계 왜곡 주의
 * `desktopCapturer.getSources`가 반환하는 `thumbnail` 이미지는 물리 픽셀 크기(`width * scaleFactor`, `height * scaleFactor`)를 가지며 내부 `scaleFactor`는 `1.0`입니다.
@@ -121,6 +122,7 @@
 * **v0.0.16**: macOS 다운로드 스트림을 `pipeline`으로 보강(backpressure, 오류 전파, 불완전 파일 제거).
 * **v0.0.18**: Windows 업데이트를 `quitAndInstall(true, true)`로 무음 설치 + 자동 재실행.
 * **v0.0.19**: macOS를 DMG 드래그 방식에서 zip 다운로드 → 앱 번들 자동 교체 → 재실행 방식으로 변경.
+* **v0.0.20**: macOS에서 커서 포함 캡처 시 실제 커서 색상이 유지되도록 `screencapture -C` 사용(기존 흰색 합성 커서 문제 해결).
 
 ---
 
