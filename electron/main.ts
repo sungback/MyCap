@@ -402,7 +402,6 @@ public class MyCapCursor {
   [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CURSORINFO p);
   [DllImport("user32.dll")] public static extern bool GetIconInfo(IntPtr h, out ICONINFO i);
   [DllImport("user32.dll")] public static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr h, int w, int hh, int step, IntPtr br, int flags);
-  [DllImport("user32.dll")] public static extern uint GetDpiForSystem();
   [DllImport("gdi32.dll")] public static extern int GetObject(IntPtr h, int c, ref BITMAP b);
   [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr o);
 }
@@ -413,10 +412,10 @@ $h = [MyCapCursor]::GetSystemMetrics(1)
 $bmp = New-Object System.Drawing.Bitmap $w, $h
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.CopyFromScreen(0, 0, 0, 0, (New-Object System.Drawing.Size $w, $h))
-# 접근성 "포인터 크기" 설정(CursorBaseSize)과 DPI 배율을 반영한 실제 표시 크기
-$base = 32
-try { $base = [int](Get-ItemPropertyValue 'HKCU:\\Control Panel\\Cursors' -Name CursorBaseSize) } catch {}
-$target = [int][math]::Round($base * [MyCapCursor]::GetDpiForSystem() / 96)
+# 접근성 "포인터 크기" 설정(CursorBaseSize)이 곧 표시 크기. 캡처할 때마다 읽으므로 설정 변경이 바로 반영된다.
+# (DPI 배율을 추가로 곱하면 이중 적용되어 125%에서 커 보인다.)
+$target = 32
+try { $target = [int](Get-ItemPropertyValue 'HKCU:\\Control Panel\\Cursors' -Name CursorBaseSize) } catch {}
 $ci = New-Object MyCapCursor+CURSORINFO
 $ci.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($ci)
 if ([MyCapCursor]::GetCursorInfo([ref]$ci) -and ($ci.flags -band 1)) {
