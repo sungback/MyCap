@@ -618,6 +618,8 @@ async function startRegionCapture() {
 }
 
 const OWN_WINDOW_TITLES = new Set(['화면 캡쳐', '창 선택', '캡처 편집'])
+// 사용자가 캡처할 일이 없는 시스템 보조 창(입력기 표시 등). 이름이 정확히 일치할 때만 제외한다.
+const SYSTEM_HELPER_WINDOW_TITLES = new Set(['IME Indicator', 'Status'])
 
 function closePicker() {
   if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close()
@@ -634,7 +636,9 @@ async function startWindowCapture() {
     thumbnailSize: { width: 320, height: 200 },
   })
 
-  const candidates = sources.filter((s) => s.name && !OWN_WINDOW_TITLES.has(s.name))
+  const candidates = sources.filter(
+    (s) => s.name && !OWN_WINDOW_TITLES.has(s.name) && !SYSTEM_HELPER_WINDOW_TITLES.has(s.name),
+  )
 
   if (candidates.length === 0) {
     new Notification({ title: '캡처할 창 없음', body: '열려 있는 다른 창을 찾지 못했습니다.' }).show()
