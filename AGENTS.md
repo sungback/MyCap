@@ -10,7 +10,7 @@
 1. **기본 릴리스 푸시 자동 수행:**
    * 사용자의 명시적 요청: *"앞으로 다시 얘기하지 않으면 기본으로 릴리스 푸시까지 해줘."*
    * 코드 수정 및 기능 구현이 완료되면 반드시 아래 릴리스 프로세스까지 완료해야 합니다:
-     1) `npm run build && npm run lint` 검증
+     1) `npm test ; npm run build ; npm run lint` 검증 (Windows PowerShell 기준)
      2) `package.json` 버전 패치 올림 (예: `0.0.8` ➡️ `0.0.9`)
      3) Git 커밋 (`git add . ; git commit -m "..."`)
      4) Git 태그 생성 (`git tag -a vX.X.X -m "Release vX.X.X"`)
@@ -38,6 +38,22 @@
 ---
 
 ## 🧩 2. 핵심 아키텍처 및 윈도우 구조
+
+### 소스 구성 (`electron/`)
+
+| 파일 | 역할 |
+| :--- | :--- |
+| `main.ts` | 앱 진입점: 윈도우/트레이/단축키/IPC/업데이트 연결 (Electron API 의존 코드) |
+| `preload.ts` | 렌더러에 노출하는 IPC API |
+| `windows-scripts.ts` | Windows 전용 PowerShell 스크립트 상수 (커서 캡처, PrintWindow, 화면 영역 캡처) |
+| `capture-utils.ts` | 순수 로직: 검은 화면 판정, 창 핸들 파싱, 창 목록 필터 |
+| `cursor-draw.ts` | 순수 로직: macOS 폴백용 합성 커서 그리기 |
+| `settings.ts` | `userData/settings.json` 읽기/쓰기 |
+| `update-utils.ts` | 순수 로직: 맥 업데이트 zip 선택 |
+| `*.test.ts` | vitest 단위 테스트 (`npm test`). Electron API를 쓰지 않는 모듈만 테스트 대상 |
+
+* 새 로직은 가능하면 Electron 의존 없는 모듈로 만들고 테스트를 함께 추가합니다. (`vitest.config.ts`는 `vite.config.ts`의 electron 플러그인이 테스트 중 실행되지 않도록 분리되어 있습니다.)
+* `electron/` 안에서 상대 import는 `./foo.ts`처럼 확장자를 붙입니다. (`tsconfig.node.json`이 `nodenext`)
 
 앱은 용도별로 독립된 4개의 Electron 윈도우로 구성됩니다:
 
@@ -132,6 +148,7 @@
 * **v0.0.28**: Windows 창 캡처에서 작업 관리자 등 GPU 렌더링 창이 검게 찍히면 PowerShell `PrintWindow(PW_RENDERFULLCONTENT)`로 재캡처(실패 시 원본 유지).
 * **v0.0.29**: 작업 관리자 검은 화면 보정 강화: 검은 화면 판정을 "밝은 픽셀 비율 1% 미만"으로 변경(흰 점 하나 때문에 보정이 건너뛰어지던 문제), `PrintWindow`가 실패하면 창을 앞으로 가져와 화면 영역을 잘라 찍는 2차 보정 추가.
 * **v0.0.30**: 창 선택 목록에서도 작업 관리자 등 검게 나오는 미리보기를 같은 보정(PrintWindow → 화면 영역 캡처)으로 복구. 선택 창을 띄우기 전에 처리하며 최소화된 창은 복원하지 않음.
+* **v0.0.31**: 리팩토링(동작 변경 없음): `main.ts`에서 PowerShell 스크립트/순수 로직/설정 모듈 분리, vitest 단위 테스트 22개 추가.
 
 ---
 
@@ -140,6 +157,9 @@
 ```powershell
 # 개발 서버 실행
 npm run dev
+
+# 단위 테스트
+npm test
 
 # 빌드 및 린트 검증
 npm run build ; npm run lint

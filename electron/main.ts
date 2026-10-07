@@ -24,6 +24,15 @@ import crypto from 'node:crypto'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { autoUpdater } from 'electron-updater'
+import {
+  WIN_CURSOR_CAPTURE_PS,
+  WIN_PRINT_WINDOW_PS,
+  WIN_SCREEN_CROP_PS,
+} from './windows-scripts.ts'
+import { drawCursorOnBitmap } from './cursor-draw.ts'
+import { readSettings, writeSettings } from './settings.ts'
+import { pickMacZip } from './update-utils.ts'
+import { isBitmapMostlyBlack, isSelectableWindow, parseWindowHandle } from './capture-utils.ts'
 
 const isPortable = Boolean(
   process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE,
@@ -85,10 +94,9 @@ function setupAutoUpdater() {
   } else {
     autoUpdater.on('update-available', (info) => {
       availableUpdateVersion = info.version
-      const zipFile = (info.files as any[])?.find((f) => f.url?.endsWith('-mac.zip'))
-      const zipFileName = zipFile ? zipFile.url : `ScreenCaptureApp-${info.version}-arm64-mac.zip`
-      availableZipUrl = `https://github.com/sungback/MyCap/releases/download/v${info.version}/${zipFileName}`
-      availableZipSha512 = zipFile?.sha512 ?? null
+      const zip = pickMacZip(info.files, info.version)
+      availableZipUrl = zip.url
+      availableZipSha512 = zip.sha512
 
       broadcastUpdateStatus({
         state: 'available',
@@ -288,48 +296,12 @@ async function getPrimaryDisplayScreenshot() {
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json')
 
-function loadIncludeCursor(): boolean {
-  try {
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf8')).includeCursor === true
-  } catch {
-    return false // 파일이 없거나 손상된 경우 기본값
-  }
-}
-
 function setIncludeCursor(value: boolean) {
   includeCursor = value
-  try {
-    fs.writeFileSync(settingsPath, JSON.stringify({ includeCursor }))
-  } catch (err) {
-    console.error('Failed to save settings:', err)
-  }
+  writeSettings(settingsPath, { includeCursor })
 }
 
-let includeCursor = loadIncludeCursor()
-
-const CURSOR_TEMPLATE = [
-  'B...............',
-  'BB..............',
-  'BWB.............',
-  'BWWB............',
-  'BWWWB...........',
-  'BWWWWB..........',
-  'BWWWWWB.........',
-  'BWWWWWWB........',
-  'BWWWWWWWB.......',
-  'BWWWWWWWWB......',
-  'BWWWWWWWWWB.....',
-  'BWWWWWWWWWWB....',
-  'BWWWWWWBBBBBB...',
-  'BWWWBWWB........',
-  'BWWB..BWWB......',
-  'BWB...BWWB......',
-  'BB.....BWWB.....',
-  'B......BWWB.....',
-  '........BWWB....',
-  '........BWWB....',
-  '.........BBB....',
-]
+let includeCursor = readSettings(settingsPath).includeCursor
 
 function drawCursorOnNativeImage(
   image: NativeImage,
@@ -339,116 +311,10 @@ function drawCursorOnNativeImage(
 ): NativeImage {
   const { width, height } = image.getSize()
   const bmp = image.toBitmap()
-
-  const s = Math.max(1, Math.round(scaleFactor))
-  const rows = CURSOR_TEMPLATE.length
-  const cols = CURSOR_TEMPLATE[0].length
-
-  const blendPixel = (px: number, py: number, r: number, g: number, b: number, alpha: number) => {
-    if (px < 0 || px >= width || py < 0 || py >= height) return
-    const idx = (py * width + px) * 4
-    const invA = 1 - alpha
-    bmp[idx] = Math.round(b * alpha + bmp[idx] * invA)
-    bmp[idx + 1] = Math.round(g * alpha + bmp[idx + 1] * invA)
-    bmp[idx + 2] = Math.round(r * alpha + bmp[idx + 2] * invA)
-  }
-
-  // Draw soft drop shadow offset
-  const shadowOffsetX = s
-  const shadowOffsetY = Math.max(1, Math.round(s * 1.5))
-  for (let r = 0; r < rows; r++) {
-    const row = CURSOR_TEMPLATE[r]
-    for (let c = 0; c < cols; c++) {
-      const char = row[c]
-      if (char === 'B' || char === 'W') {
-        for (let dy = 0; dy < s; dy++) {
-          for (let dx = 0; dx < s; dx++) {
-            blendPixel(cursorX + c * s + dx + shadowOffsetX, cursorY + r * s + dy + shadowOffsetY, 0, 0, 0, 0.28)
-          }
-        }
-      }
-    }
-  }
-
-  // Draw cursor body
-  for (let r = 0; r < rows; r++) {
-    const row = CURSOR_TEMPLATE[r]
-    for (let c = 0; c < cols; c++) {
-      const char = row[c]
-      if (char === 'B') {
-        for (let dy = 0; dy < s; dy++) {
-          for (let dx = 0; dx < s; dx++) {
-            blendPixel(cursorX + c * s + dx, cursorY + r * s + dy, 0, 0, 0, 1.0)
-          }
-        }
-      } else if (char === 'W') {
-        for (let dy = 0; dy < s; dy++) {
-          for (let dx = 0; dx < s; dx++) {
-            blendPixel(cursorX + c * s + dx, cursorY + r * s + dy, 255, 255, 255, 1.0)
-          }
-        }
-      }
-    }
-  }
-
+  drawCursorOnBitmap(bmp, width, height, cursorX, cursorY, scaleFactor)
+  // scaleFactor를 넘기면 crop() 좌표가 이중 적용된다. (AGENTS.md 참고)
   return nativeImage.createFromBitmap(bmp, { width, height })
 }
-
-// Windows: 주 모니터를 물리 픽셀 크기로 캡처한 뒤 실제 시스템 커서 핸들(색/모양/크기 그대로)을 DrawIconEx로 그린다.
-const WIN_CURSOR_CAPTURE_PS = `
-param([string]$out)
-Add-Type -AssemblyName System.Drawing
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public class MyCapCursor {
-  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x; public int y; }
-  [StructLayout(LayoutKind.Sequential)] public struct CURSORINFO { public int cbSize; public int flags; public IntPtr hCursor; public POINT pt; }
-  [StructLayout(LayoutKind.Sequential)] public struct BITMAP { public int bmType; public int bmWidth; public int bmHeight; public int bmWidthBytes; public ushort bmPlanes; public ushort bmBitsPixel; public IntPtr bmBits; }
-  [StructLayout(LayoutKind.Sequential)] public struct ICONINFO { public bool fIcon; public int xHotspot; public int yHotspot; public IntPtr hbmMask; public IntPtr hbmColor; }
-  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-  [DllImport("user32.dll")] public static extern int GetSystemMetrics(int i);
-  [DllImport("user32.dll")] public static extern bool GetCursorInfo(ref CURSORINFO p);
-  [DllImport("user32.dll")] public static extern bool GetIconInfo(IntPtr h, out ICONINFO i);
-  [DllImport("user32.dll")] public static extern bool DrawIconEx(IntPtr hdc, int x, int y, IntPtr h, int w, int hh, int step, IntPtr br, int flags);
-  [DllImport("gdi32.dll")] public static extern int GetObject(IntPtr h, int c, ref BITMAP b);
-  [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr o);
-}
-'@
-[void][MyCapCursor]::SetProcessDPIAware()
-$w = [MyCapCursor]::GetSystemMetrics(0)
-$h = [MyCapCursor]::GetSystemMetrics(1)
-$bmp = New-Object System.Drawing.Bitmap $w, $h
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen(0, 0, 0, 0, (New-Object System.Drawing.Size $w, $h))
-# 접근성 "포인터 크기" 설정(CursorBaseSize)이 곧 표시 크기. 캡처할 때마다 읽으므로 설정 변경이 바로 반영된다.
-# (DPI 배율을 추가로 곱하면 이중 적용되어 125%에서 커 보인다.)
-$target = 32
-try { $target = [int](Get-ItemPropertyValue 'HKCU:\\Control Panel\\Cursors' -Name CursorBaseSize) } catch {}
-$ci = New-Object MyCapCursor+CURSORINFO
-$ci.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($ci)
-if ([MyCapCursor]::GetCursorInfo([ref]$ci) -and ($ci.flags -band 1)) {
-  $ii = New-Object MyCapCursor+ICONINFO
-  if ([MyCapCursor]::GetIconInfo($ci.hCursor, [ref]$ii)) {
-    $bm = New-Object MyCapCursor+BITMAP
-    $src = $ii.hbmColor
-    if ($src -eq [IntPtr]::Zero) { $src = $ii.hbmMask }
-    [void][MyCapCursor]::GetObject($src, [System.Runtime.InteropServices.Marshal]::SizeOf($bm), [ref]$bm)
-    $nat = $bm.bmWidth
-    if ($nat -lt 1) { $nat = 32 }
-    $size = [math]::Max($nat, $target)
-    $k = $size / $nat
-    $hdc = $g.GetHdc()
-    [void][MyCapCursor]::DrawIconEx($hdc, $ci.pt.x - [int][math]::Round($ii.xHotspot * $k), $ci.pt.y - [int][math]::Round($ii.yHotspot * $k), $ci.hCursor, $size, $size, 0, [IntPtr]::Zero, 3)
-    $g.ReleaseHdc($hdc)
-    if ($ii.hbmMask -ne [IntPtr]::Zero) { [void][MyCapCursor]::DeleteObject($ii.hbmMask) }
-    if ($ii.hbmColor -ne [IntPtr]::Zero) { [void][MyCapCursor]::DeleteObject($ii.hbmColor) }
-  }
-}
-$g.Dispose()
-$bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
-$bmp.Dispose()
-`
 
 async function runPowerShellScript(script: string, args: string[]) {
   const ps1 = path.join(os.tmpdir(), `mycap-${process.pid}-${Date.now()}.ps1`)
@@ -621,92 +487,9 @@ async function startRegionCapture() {
   })
 }
 
-// Windows: 작업 관리자처럼 GPU로 그려지는 창은 desktopCapturer가 검은 화면을 주므로,
-// PrintWindow(PW_RENDERFULLCONTENT)로 창 내용을 직접 받아 온다.
-const WIN_PRINT_WINDOW_PS = `
-param([string]$hwnd, [string]$out, [string]$mode)
-Add-Type -AssemblyName System.Drawing
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public class MyCapWin {
-  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left; public int top; public int right; public int bottom; }
-  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
-  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
-}
-'@
-[void][MyCapWin]::SetProcessDPIAware()
-$h = [IntPtr][long]$hwnd
-$r = New-Object MyCapWin+RECT
-if (-not [MyCapWin]::GetWindowRect($h, [ref]$r)) { exit 1 }
-$w = $r.right - $r.left
-$ht = $r.bottom - $r.top
-if ($w -lt 1 -or $ht -lt 1) { exit 1 }
-$bmp = New-Object System.Drawing.Bitmap $w, $ht
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$hdc = $g.GetHdc()
-$ok = [MyCapWin]::PrintWindow($h, $hdc, 2)
-$g.ReleaseHdc($hdc)
-$g.Dispose()
-if (-not $ok) { exit 1 }
-$bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
-$bmp.Dispose()
-`
 
-// 화면에서 창 영역을 직접 잘라 찍는 2차 보정. PrintWindow도 검게 나오는 창(WinUI/GPU 렌더링)용.
-// 창을 맨 앞으로 가져온 뒤 보이는 프레임 영역(그림자 제외)만 캡처한다.
-const WIN_SCREEN_CROP_PS = `
-param([string]$hwnd, [string]$out, [string]$mode)
-Add-Type -AssemblyName System.Drawing
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public class MyCapCrop {
-  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left; public int top; public int right; public int bottom; }
-  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
-  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
-  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
-  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
-}
-'@
-[void][MyCapCrop]::SetProcessDPIAware()
-$h = [IntPtr][long]$hwnd
-if ([MyCapCrop]::IsIconic($h)) {
-  if ($mode -eq 'preview') { exit 1 }  # 미리보기 때문에 최소화된 창을 복원하지는 않는다
-  [void][MyCapCrop]::ShowWindow($h, 9)
-}
-[void][MyCapCrop]::SetForegroundWindow($h)
-Start-Sleep -Milliseconds 500
-$r = New-Object MyCapCrop+RECT
-if ([MyCapCrop]::DwmGetWindowAttribute($h, 9, [ref]$r, 16) -ne 0) {
-  if (-not [MyCapCrop]::GetWindowRect($h, [ref]$r)) { exit 1 }
-}
-$w = $r.right - $r.left
-$ht = $r.bottom - $r.top
-if ($w -lt 1 -or $ht -lt 1) { exit 1 }
-$bmp = New-Object System.Drawing.Bitmap $w, $ht
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($r.left, $r.top, 0, 0, (New-Object System.Drawing.Size $w, $ht))
-$g.Dispose()
-$bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
-$bmp.Dispose()
-`
 
-// 샘플 픽셀의 99% 이상이 검은색이면 캡처 실패로 본다. (검은 화면에 흰 점이 하나 찍히는 경우가 있어 비율로 판단)
-function isMostlyBlack(image: NativeImage): boolean {
-  const bmp = image.toBitmap()
-  const step = 4 * 97
-  let total = 0
-  let lit = 0
-  for (let i = 0; i + 2 < bmp.length; i += step) {
-    total++
-    if (bmp[i] > 3 || bmp[i + 1] > 3 || bmp[i + 2] > 3) lit++
-  }
-  return total === 0 || lit / total < 0.01
-}
+const isMostlyBlack = (image: NativeImage) => isBitmapMostlyBlack(image.toBitmap())
 
 // 검은 화면이면 PrintWindow → 화면 영역 캡처 순서로 재시도한다. 모두 실패하면 원본을 쓴다.
 async function recoverBlackWindowCapture(
@@ -715,8 +498,8 @@ async function recoverBlackWindowCapture(
   mode = 'capture',
 ): Promise<NativeImage> {
   if (process.platform !== 'win32' || !isMostlyBlack(image)) return image
-  const hwnd = sourceId.split(':')[1]
-  if (!/^\d+$/.test(hwnd ?? '')) return image
+  const hwnd = parseWindowHandle(sourceId)
+  if (!hwnd) return image
 
   for (const [name, script] of [
     ['PrintWindow', WIN_PRINT_WINDOW_PS],
@@ -737,10 +520,6 @@ async function recoverBlackWindowCapture(
   return image
 }
 
-const OWN_WINDOW_TITLES = new Set(['화면 캡쳐', '창 선택', '캡처 편집'])
-// 사용자가 캡처할 일이 없는 시스템 보조 창(입력기 표시 등). 이름이 정확히 일치할 때만 제외한다.
-const SYSTEM_HELPER_WINDOW_TITLES = new Set(['IME Indicator', 'Status'])
-
 function closePicker() {
   if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close()
   pickerWindow = null
@@ -757,7 +536,7 @@ async function startWindowCapture() {
   })
 
   const candidates = sources
-    .filter((s) => s.name && !OWN_WINDOW_TITLES.has(s.name) && !SYSTEM_HELPER_WINDOW_TITLES.has(s.name))
+    .filter((s) => isSelectableWindow(s.name))
     .map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail }))
 
   // 작업 관리자처럼 미리보기가 검게 나오는 창은 선택 창을 띄우기 전에 보정한다.
@@ -1048,9 +827,7 @@ ipcMain.handle('update:startDownload', async () => {
   if (process.platform === 'darwin') {
     try {
       const version = availableUpdateVersion || app.getVersion()
-      const url =
-        availableZipUrl ||
-        `https://github.com/sungback/MyCap/releases/download/v${version}/ScreenCaptureApp-${version}-arm64-mac.zip`
+      const url = availableZipUrl || pickMacZip(undefined, version).url
 
       stagedMacApp = await stageMacUpdate(url, availableZipSha512)
 
