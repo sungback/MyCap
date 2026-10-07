@@ -791,7 +791,12 @@ function updateTrayMenu() {
 }
 
 function createTray() {
-  const icon = nativeImage.createFromPath(APP_ICON_PATH).resize({ width: 32, height: 32 })
+  // macOS: 메뉴 막대 색에 맞춰 자동으로 흑백 처리되는 템플릿 이미지(trayTemplate@2x.png 자동 선택)를 쓴다.
+  const icon =
+    process.platform === 'darwin'
+      ? nativeImage.createFromPath(path.join(path.dirname(APP_ICON_PATH), 'trayTemplate.png'))
+      : nativeImage.createFromPath(APP_ICON_PATH).resize({ width: 32, height: 32 })
+  if (process.platform === 'darwin') icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('화면 캡쳐 앱')
   updateTrayMenu()
