@@ -654,31 +654,80 @@ $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
 `
 
-// 샘플링해서 거의 전부 검은색이면 캡처 실패로 본다.
+// 화면에서 창 영역을 직접 잘라 찍는 2차 보정. PrintWindow도 검게 나오는 창(WinUI/GPU 렌더링)용.
+// 창을 맨 앞으로 가져온 뒤 보이는 프레임 영역(그림자 제외)만 캡처한다.
+const WIN_SCREEN_CROP_PS = `
+param([string]$hwnd, [string]$out)
+Add-Type -AssemblyName System.Drawing
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class MyCapCrop {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left; public int top; public int right; public int bottom; }
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
+}
+'@
+[void][MyCapCrop]::SetProcessDPIAware()
+$h = [IntPtr][long]$hwnd
+if ([MyCapCrop]::IsIconic($h)) { [void][MyCapCrop]::ShowWindow($h, 9) }
+[void][MyCapCrop]::SetForegroundWindow($h)
+Start-Sleep -Milliseconds 500
+$r = New-Object MyCapCrop+RECT
+if ([MyCapCrop]::DwmGetWindowAttribute($h, 9, [ref]$r, 16) -ne 0) {
+  if (-not [MyCapCrop]::GetWindowRect($h, [ref]$r)) { exit 1 }
+}
+$w = $r.right - $r.left
+$ht = $r.bottom - $r.top
+if ($w -lt 1 -or $ht -lt 1) { exit 1 }
+$bmp = New-Object System.Drawing.Bitmap $w, $ht
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($r.left, $r.top, 0, 0, (New-Object System.Drawing.Size $w, $ht))
+$g.Dispose()
+$bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
+$bmp.Dispose()
+`
+
+// 샘플 픽셀의 99% 이상이 검은색이면 캡처 실패로 본다. (검은 화면에 흰 점이 하나 찍히는 경우가 있어 비율로 판단)
 function isMostlyBlack(image: NativeImage): boolean {
   const bmp = image.toBitmap()
   const step = 4 * 97
-  for (let i = 0; i < bmp.length; i += step) {
-    if (bmp[i] > 3 || bmp[i + 1] > 3 || bmp[i + 2] > 3) return false
+  let total = 0
+  let lit = 0
+  for (let i = 0; i + 2 < bmp.length; i += step) {
+    total++
+    if (bmp[i] > 3 || bmp[i + 1] > 3 || bmp[i + 2] > 3) lit++
   }
-  return true
+  return total === 0 || lit / total < 0.01
 }
 
+// 검은 화면이면 PrintWindow → 화면 영역 캡처 순서로 재시도한다. 모두 실패하면 원본을 쓴다.
 async function recoverBlackWindowCapture(image: NativeImage, sourceId: string): Promise<NativeImage> {
   if (process.platform !== 'win32' || !isMostlyBlack(image)) return image
   const hwnd = sourceId.split(':')[1]
   if (!/^\d+$/.test(hwnd ?? '')) return image
-  const out = path.join(os.tmpdir(), `mycap-window-${process.pid}.png`)
-  try {
-    await runPowerShellScript(WIN_PRINT_WINDOW_PS, [hwnd, out])
-    const printed = nativeImage.createFromPath(out)
-    return printed.isEmpty() || isMostlyBlack(printed) ? image : printed
-  } catch (err) {
-    console.error('PrintWindow capture failed:', err)
-    return image
-  } finally {
-    fs.rmSync(out, { force: true })
+
+  for (const [name, script] of [
+    ['PrintWindow', WIN_PRINT_WINDOW_PS],
+    ['screen crop', WIN_SCREEN_CROP_PS],
+  ]) {
+    const out = path.join(os.tmpdir(), `mycap-window-${process.pid}.png`)
+    try {
+      await runPowerShellScript(script, [hwnd, out])
+      const recovered = nativeImage.createFromPath(out)
+      if (!recovered.isEmpty() && !isMostlyBlack(recovered)) return recovered
+      console.error(`${name} capture was still black`)
+    } catch (err) {
+      console.error(`${name} capture failed:`, err)
+    } finally {
+      fs.rmSync(out, { force: true })
+    }
   }
+  return image
 }
 
 const OWN_WINDOW_TITLES = new Set(['화면 캡쳐', '창 선택', '캡처 편집'])
