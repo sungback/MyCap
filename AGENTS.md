@@ -129,6 +129,7 @@
 * **v0.0.25**: macOS 메뉴 막대(트레이) 아이콘을 파란 앱 아이콘 대신 흑백 템플릿 이미지(`public/trayTemplate.png`, `@2x`)로 교체해 메뉴 막대와 어울리게 변경.
 * **v0.0.26**: 메인 창에 `[로그인 시 자동 실행]` 토글 추가(`app.setLoginItemSettings`, 실행 시 `--hidden`으로 창 없이 트레이로 시작). 포터블/개발 모드에서는 토글을 숨김.
 * **v0.0.27**: 창 캡처 선택 목록에서 시스템 보조 창(`IME Indicator`, `Status`)을 제외(작업 관리자 등 일반 창은 유지).
+* **v0.0.28**: Windows 창 캡처에서 작업 관리자 등 GPU 렌더링 창이 검게 찍히면 PowerShell `PrintWindow(PW_RENDERFULLCONTENT)`로 재캡처(실패 시 원본 유지).
 
 ---
 

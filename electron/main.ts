@@ -450,6 +450,20 @@ $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
 `
 
+async function runPowerShellScript(script: string, args: string[]) {
+  const ps1 = path.join(os.tmpdir(), `mycap-${process.pid}-${Date.now()}.ps1`)
+  fs.writeFileSync(ps1, script)
+  try {
+    await execFileAsync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1, ...args],
+      { windowsHide: true },
+    )
+  } finally {
+    fs.rmSync(ps1, { force: true })
+  }
+}
+
 // 실제 커서가 포함된 이미지를 만들어 주는 외부 명령을 실행한다. 크기가 다르거나 실패하면 null.
 async function captureWithRealCursor(
   image: NativeImage,
@@ -478,20 +492,10 @@ async function overlayCursorIfVisible(
   // desktopCapturer는 환경에 따라 커서를 빼므로, 두 OS 모두 실제 커서가 담긴 이미지로 교체한다.
   // 이미지를 통째로 교체하므로 커서가 이중으로 그려지지 않는다. 실패하면 Windows는 원본을 그대로 쓴다.
   if (process.platform === 'win32') {
-    const ps1 = path.join(os.tmpdir(), `mycap-cursor-${process.pid}.ps1`)
-    fs.writeFileSync(ps1, WIN_CURSOR_CAPTURE_PS)
-    try {
-      const real = await captureWithRealCursor(image, (out) =>
-        execFileAsync(
-          'powershell.exe',
-          ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1, out],
-          { windowsHide: true },
-        ),
-      )
-      return real ?? image
-    } finally {
-      fs.rmSync(ps1, { force: true })
-    }
+    const real = await captureWithRealCursor(image, (out) =>
+      runPowerShellScript(WIN_CURSOR_CAPTURE_PS, [out]),
+    )
+    return real ?? image
   }
 
   // macOS: 실제 커서(색/크기 포함)를 그려 주는 screencapture -C 결과를 쓴다. 실패하면 아래 합성 커서로 대체한다.
@@ -617,6 +621,66 @@ async function startRegionCapture() {
   })
 }
 
+// Windows: 작업 관리자처럼 GPU로 그려지는 창은 desktopCapturer가 검은 화면을 주므로,
+// PrintWindow(PW_RENDERFULLCONTENT)로 창 내용을 직접 받아 온다.
+const WIN_PRINT_WINDOW_PS = `
+param([string]$hwnd, [string]$out)
+Add-Type -AssemblyName System.Drawing
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class MyCapWin {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int left; public int top; public int right; public int bottom; }
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
+}
+'@
+[void][MyCapWin]::SetProcessDPIAware()
+$h = [IntPtr][long]$hwnd
+$r = New-Object MyCapWin+RECT
+if (-not [MyCapWin]::GetWindowRect($h, [ref]$r)) { exit 1 }
+$w = $r.right - $r.left
+$ht = $r.bottom - $r.top
+if ($w -lt 1 -or $ht -lt 1) { exit 1 }
+$bmp = New-Object System.Drawing.Bitmap $w, $ht
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$hdc = $g.GetHdc()
+$ok = [MyCapWin]::PrintWindow($h, $hdc, 2)
+$g.ReleaseHdc($hdc)
+$g.Dispose()
+if (-not $ok) { exit 1 }
+$bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
+$bmp.Dispose()
+`
+
+// 샘플링해서 거의 전부 검은색이면 캡처 실패로 본다.
+function isMostlyBlack(image: NativeImage): boolean {
+  const bmp = image.toBitmap()
+  const step = 4 * 97
+  for (let i = 0; i < bmp.length; i += step) {
+    if (bmp[i] > 3 || bmp[i + 1] > 3 || bmp[i + 2] > 3) return false
+  }
+  return true
+}
+
+async function recoverBlackWindowCapture(image: NativeImage, sourceId: string): Promise<NativeImage> {
+  if (process.platform !== 'win32' || !isMostlyBlack(image)) return image
+  const hwnd = sourceId.split(':')[1]
+  if (!/^\d+$/.test(hwnd ?? '')) return image
+  const out = path.join(os.tmpdir(), `mycap-window-${process.pid}.png`)
+  try {
+    await runPowerShellScript(WIN_PRINT_WINDOW_PS, [hwnd, out])
+    const printed = nativeImage.createFromPath(out)
+    return printed.isEmpty() || isMostlyBlack(printed) ? image : printed
+  } catch (err) {
+    console.error('PrintWindow capture failed:', err)
+    return image
+  } finally {
+    fs.rmSync(out, { force: true })
+  }
+}
+
 const OWN_WINDOW_TITLES = new Set(['화면 캡쳐', '창 선택', '캡처 편집'])
 // 사용자가 캡처할 일이 없는 시스템 보조 창(입력기 표시 등). 이름이 정확히 일치할 때만 제외한다.
 const SYSTEM_HELPER_WINDOW_TITLES = new Set(['IME Indicator', 'Status'])
@@ -676,7 +740,7 @@ async function startWindowCapture() {
       new Notification({ title: '캡처 실패', body: '선택한 창을 다시 찾지 못했습니다.' }).show()
       return
     }
-    await finishCapture(selected.thumbnail)
+    await finishCapture(await recoverBlackWindowCapture(selected.thumbnail, sourceId))
   })
 
   ipcMain.once('picker:cancel', () => closePicker())
