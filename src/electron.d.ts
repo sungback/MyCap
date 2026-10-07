@@ -8,6 +8,8 @@ declare global {
       triggerWindowCapture: () => Promise<void>
       getIncludeCursor: () => Promise<boolean>
       setIncludeCursor: (value: boolean) => Promise<boolean>
+      getOpenAtLogin: () => Promise<boolean>
+      setOpenAtLogin: (value: boolean) => Promise<boolean>
       onCursorChanged: (callback: (includeCursor: boolean) => void) => () => void
       onCaptureDone: (callback: (payload: { filePath: string }) => void) => () => void
     }

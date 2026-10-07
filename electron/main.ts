@@ -29,6 +29,15 @@ const isPortable = Boolean(
   process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE,
 )
 
+// 로그인 시 자동 실행으로 켜진 경우 창 없이 트레이로만 시작한다.
+// (포터블/개발 모드는 실행 파일 경로가 일정하지 않아 등록하지 않는다)
+// Windows는 조회 시에도 등록할 때와 같은 args가 필요하다.
+const LOGIN_ITEM_ARGS = { args: ['--hidden'] }
+const canAutoLaunch = app.isPackaged && !isPortable
+const startHidden =
+  process.argv.includes('--hidden') ||
+  (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin)
+
 let isManualUpdateCheck = false
 let availableUpdateVersion: string | null = null
 let availableZipUrl: string | null = null
@@ -737,6 +746,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 440,
     height: 580,
+    show: !startHidden,
     resizable: false,
     autoHideMenuBar: true,
     icon: APP_ICON_PATH,
@@ -807,6 +817,12 @@ ipcMain.handle('capture:trigger', () => captureFullScreen())
 ipcMain.handle('capture:triggerRegion', () => startRegionCapture())
 ipcMain.handle('capture:triggerWindow', () => startWindowCapture())
 ipcMain.handle('capture:getIncludeCursor', () => includeCursor)
+ipcMain.handle('app:getOpenAtLogin', () => canAutoLaunch && app.getLoginItemSettings(LOGIN_ITEM_ARGS).openAtLogin)
+ipcMain.handle('app:setOpenAtLogin', (_event, value: boolean) => {
+  if (!canAutoLaunch) return false
+  app.setLoginItemSettings({ openAtLogin: Boolean(value), ...LOGIN_ITEM_ARGS })
+  return app.getLoginItemSettings(LOGIN_ITEM_ARGS).openAtLogin
+})
 ipcMain.handle('capture:setIncludeCursor', (_event, value: boolean) => {
   setIncludeCursor(Boolean(value))
   updateTrayMenu()
@@ -890,6 +906,7 @@ function applyMacUpdate(): boolean {
 ipcMain.handle('update:getInfo', () => ({
   version: app.getVersion(),
   isPortable,
+  canAutoLaunch,
   platform: process.platform,
 }))
 ipcMain.handle('update:check', () => checkForUpdates(true))

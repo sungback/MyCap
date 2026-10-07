@@ -17,8 +17,10 @@
   margin-top: 1rem;
   margin-bottom: 0.25rem;
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
+  gap: 0.25rem 0.5rem;
 }
 
 .cursor-toggle {

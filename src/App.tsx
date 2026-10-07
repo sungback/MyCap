@@ -14,9 +14,11 @@ function App() {
   const [versionInfo, setVersionInfo] = useState<{
     version: string
     isPortable: boolean
+    canAutoLaunch?: boolean
     platform?: string
   } | null>(null)
   const [includeCursor, setIncludeCursor] = useState(false)
+  const [openAtLogin, setOpenAtLogin] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateState>({ state: 'idle' })
 
   useEffect(() => {
@@ -25,6 +27,7 @@ function App() {
       setCapturing(false)
     })
 
+    window.captureApi?.getOpenAtLogin().then(setOpenAtLogin)
     window.captureApi?.getIncludeCursor().then((val) => {
       if (typeof val === 'boolean') setIncludeCursor(val)
     })
@@ -66,6 +69,12 @@ function App() {
     await window.captureApi?.setIncludeCursor(checked)
   }
 
+  const handleToggleOpenAtLogin = async (checked: boolean) => {
+    setOpenAtLogin(checked)
+    const actual = await window.captureApi?.setOpenAtLogin(checked)
+    if (typeof actual === 'boolean') setOpenAtLogin(actual)
+  }
+
   const handleCheckUpdate = async () => {
     setUpdateStatus({ state: 'checking' })
     await window.updateApi?.checkForUpdates()
@@ -104,6 +113,17 @@ function App() {
           <span className="toggle-slider" />
           <span className="toggle-label">마우스 커서 포함</span>
         </label>
+        {versionInfo?.canAutoLaunch && (
+          <label className="cursor-toggle">
+            <input
+              type="checkbox"
+              checked={openAtLogin}
+              onChange={(e) => handleToggleOpenAtLogin(e.target.checked)}
+            />
+            <span className="toggle-slider" />
+            <span className="toggle-label">로그인 시 자동 실행</span>
+          </label>
+        )}
       </div>
 
       <div className="button-row">

@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('captureApi', {
   triggerWindowCapture: () => ipcRenderer.invoke('capture:triggerWindow'),
   getIncludeCursor: () => ipcRenderer.invoke('capture:getIncludeCursor'),
   setIncludeCursor: (value: boolean) => ipcRenderer.invoke('capture:setIncludeCursor', value),
+  getOpenAtLogin: () => ipcRenderer.invoke('app:getOpenAtLogin'),
+  setOpenAtLogin: (value: boolean) => ipcRenderer.invoke('app:setOpenAtLogin', value),
   onCursorChanged: (callback: (includeCursor: boolean) => void) => {
     const listener = (_event: unknown, val: boolean) => callback(val)
     ipcRenderer.on('capture:cursorChanged', listener)
