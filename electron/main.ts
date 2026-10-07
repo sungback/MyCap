@@ -624,7 +624,7 @@ async function startRegionCapture() {
 // Windows: 작업 관리자처럼 GPU로 그려지는 창은 desktopCapturer가 검은 화면을 주므로,
 // PrintWindow(PW_RENDERFULLCONTENT)로 창 내용을 직접 받아 온다.
 const WIN_PRINT_WINDOW_PS = `
-param([string]$hwnd, [string]$out)
+param([string]$hwnd, [string]$out, [string]$mode)
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System;
@@ -657,7 +657,7 @@ $bmp.Dispose()
 // 화면에서 창 영역을 직접 잘라 찍는 2차 보정. PrintWindow도 검게 나오는 창(WinUI/GPU 렌더링)용.
 // 창을 맨 앞으로 가져온 뒤 보이는 프레임 영역(그림자 제외)만 캡처한다.
 const WIN_SCREEN_CROP_PS = `
-param([string]$hwnd, [string]$out)
+param([string]$hwnd, [string]$out, [string]$mode)
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System;
@@ -674,7 +674,10 @@ public class MyCapCrop {
 '@
 [void][MyCapCrop]::SetProcessDPIAware()
 $h = [IntPtr][long]$hwnd
-if ([MyCapCrop]::IsIconic($h)) { [void][MyCapCrop]::ShowWindow($h, 9) }
+if ([MyCapCrop]::IsIconic($h)) {
+  if ($mode -eq 'preview') { exit 1 }  # 미리보기 때문에 최소화된 창을 복원하지는 않는다
+  [void][MyCapCrop]::ShowWindow($h, 9)
+}
 [void][MyCapCrop]::SetForegroundWindow($h)
 Start-Sleep -Milliseconds 500
 $r = New-Object MyCapCrop+RECT
@@ -706,7 +709,11 @@ function isMostlyBlack(image: NativeImage): boolean {
 }
 
 // 검은 화면이면 PrintWindow → 화면 영역 캡처 순서로 재시도한다. 모두 실패하면 원본을 쓴다.
-async function recoverBlackWindowCapture(image: NativeImage, sourceId: string): Promise<NativeImage> {
+async function recoverBlackWindowCapture(
+  image: NativeImage,
+  sourceId: string,
+  mode = 'capture',
+): Promise<NativeImage> {
   if (process.platform !== 'win32' || !isMostlyBlack(image)) return image
   const hwnd = sourceId.split(':')[1]
   if (!/^\d+$/.test(hwnd ?? '')) return image
@@ -717,7 +724,7 @@ async function recoverBlackWindowCapture(image: NativeImage, sourceId: string): 
   ]) {
     const out = path.join(os.tmpdir(), `mycap-window-${process.pid}.png`)
     try {
-      await runPowerShellScript(script, [hwnd, out])
+      await runPowerShellScript(script, [hwnd, out, mode])
       const recovered = nativeImage.createFromPath(out)
       if (!recovered.isEmpty() && !isMostlyBlack(recovered)) return recovered
       console.error(`${name} capture was still black`)
@@ -749,9 +756,17 @@ async function startWindowCapture() {
     thumbnailSize: { width: 320, height: 200 },
   })
 
-  const candidates = sources.filter(
-    (s) => s.name && !OWN_WINDOW_TITLES.has(s.name) && !SYSTEM_HELPER_WINDOW_TITLES.has(s.name),
-  )
+  const candidates = sources
+    .filter((s) => s.name && !OWN_WINDOW_TITLES.has(s.name) && !SYSTEM_HELPER_WINDOW_TITLES.has(s.name))
+    .map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail }))
+
+  // 작업 관리자처럼 미리보기가 검게 나오는 창은 선택 창을 띄우기 전에 보정한다.
+  // (보정 중 해당 창이 잠깐 앞으로 나올 수 있어 순서대로 하나씩 처리한다)
+  for (const c of candidates) {
+    if (process.platform !== 'win32' || !isMostlyBlack(c.thumbnail)) continue
+    const fixed = await recoverBlackWindowCapture(c.thumbnail, c.id, 'preview')
+    if (fixed !== c.thumbnail) c.thumbnail = fixed.resize({ width: 320, quality: 'good' })
+  }
 
   if (candidates.length === 0) {
     new Notification({ title: '캡처할 창 없음', body: '열려 있는 다른 창을 찾지 못했습니다.' }).show()
